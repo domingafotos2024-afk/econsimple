@@ -1,7 +1,8 @@
 // api/explicar.js — Explica bajo demanda una noticia que el cron aún no procesó
-// (o una que el visitante pega en "✨ Explica una noticia").
+// (o una que el visitante pega en "Explica una noticia").
 // La clave de Claude NUNCA viaja al navegador: se lee de ANTHROPIC_API_KEY en Vercel.
 import { explicarNoticia } from './_claude.js';
+import { leerCompartida, guardarCompartida } from './_compartidas.js';
 
 const MAX_INPUT = 3000; // caracteres máximos de título + resumen (evita abusos y costos altos)
 const clean = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -19,9 +20,17 @@ export default async function handler(req, res) {
   if (!title) return res.status(400).json({ error: 'Falta el título' });
   if ((title + summary).length > MAX_INPUT) return res.status(400).json({ error: 'Texto demasiado largo' });
 
+  const link = clean(body.link, 500);
+  res.setHeader('Cache-Control', 'no-store');
+  // 1) ¿Otro visitante ya pidió esta noticia? Se entrega la misma explicación, sin costo.
+  const guardada = await leerCompartida(link);
+  if (guardada) return res.status(200).json({ ...guardada, compartida: true });
+  if (body.soloGuardada) return res.status(404).json({ error: 'Aún no explicada' });
+
   try {
-    const data = await explicarNoticia({ title, summary, source: clean(body.source, 80), date: clean(body.date, 40), link: clean(body.link, 500) });
-    res.setHeader('Cache-Control', 'no-store');
+    // 2) Nadie la ha pedido: se llama a Claude una sola vez y se guarda para todos.
+    const data = await explicarNoticia({ title, summary, source: clean(body.source, 80), date: clean(body.date, 40), link });
+    await guardarCompartida(link, data);
     return res.status(200).json(data);
   } catch (e) {
     console.error(e.message);

@@ -75,7 +75,7 @@ const LIVE_SOURCES = [
         <span class="hidden sm:block text-[11px] text-slate-400 -mt-0.5">Economía y política de Chile, explicadas en simple</span>
       </span>
     </a>
-    <button id="openLive" class="ml-auto rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-sm font-medium whitespace-nowrap">✨ <span class="hidden sm:inline">Explica una noticia</span><span class="sm:hidden">Explicar</span></button>
+    <button id="openLive" class="ml-auto rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-sm font-medium whitespace-nowrap"><span class="hidden sm:inline">Explica una noticia</span><span class="sm:hidden">Explicar</span></button>
   </div>
 </header>
 
@@ -490,7 +490,7 @@ function analysisHTML({simple,pais,bolsillo,terms,tone,warn,auto,ia}){
   const [tc,tl] = TONE[tone]||TONE.neutral;
   const canSpeak = 'speechSynthesis' in window;
   return `<div class="space-y-4">
-    <div class="flex items-center gap-2 flex-wrap"><span class="text-xs font-semibold rounded-full px-2.5 py-1 ${tc}">${tl}</span><span class="text-[11px] text-stone-500">${ia?'✨ Explicado con IA (Claude) · verifica en la fuente original':auto?'⚙️ Explicación automática por palabras clave · verifica en la fuente original':'✍️ Explicación revisada · verifica en la fuente original'}</span></div>
+    <div class="flex items-center gap-2 flex-wrap"><span class="text-xs font-semibold rounded-full px-2.5 py-1 ${tc}">${tl}</span><span class="text-[11px] text-stone-500">${ia?'Explicado con IA (Claude) · verifica en la fuente original':auto?'⚙️ Explicación automática por palabras clave · verifica en la fuente original':'✍️ Explicación revisada · verifica en la fuente original'}</span></div>
     <section class="rounded-2xl bg-[#fff6d6] border-2 border-[#f4d470] p-4">
       <div class="flex items-center justify-between gap-2 mb-2">
         <h4 class="font-display font-bold text-[#7a5300] text-lg">💡 En palabras simples</h4>
@@ -524,7 +524,7 @@ function renderCats(){
 }
 function cardHTML(n, live){
   const tn = n.tone || (live ? explain(n).tone : null);
-  const isIA = live && (n.exp || store.get('es_ia_'+hash(n.link||n.title)));
+  const isIA = live && (n.exp || n.shared || store.get('es_ia_'+hash(n.link||n.title)));
   const tone = tn ? `<span class="text-[11px] rounded-full px-2 py-0.5 ${TONE[tn][0]}">${TONE[tn][1].split(' ')[0]} ${tn}</span>` : `<span class="text-[11px] text-stone-400">${live?(n.topic==='pol'?'🗳️ Política':'📈 Economía'):''}</span>`;
   return `<article data-id="${esc(n.id)}" data-kind="${live?'live':'cur'}" tabindex="0" class="card fade-in cursor-pointer bg-white rounded-2xl border border-stone-200 p-4 flex flex-col ${state.active===n.id?'active':''}">
     <div class="flex items-center justify-between gap-2 mb-3">${srcBadge(n.src)}<span class="text-[11px] text-stone-500" title="${esc(fmtDate(n.date,n.dateOnly))}">${n.dateOnly?fmtDate(n.date,true):ago(n.date)}</span></div>
@@ -535,7 +535,7 @@ function cardHTML(n, live){
       ${tone}
       <div class="flex items-center gap-3">
         <a href="${esc(n.link)}" target="_blank" rel="noopener" class="ext text-[12px] text-stone-500 hover:text-ink hover:underline">Original ↗</a>
-        <span class="text-[12px] font-semibold">${isIA?'✨ ':''}Ver explicación →</span>
+        <span class="text-[12px] font-semibold">${isIA?'<span class="mr-1 rounded bg-violet-100 text-violet-800 px-1.5 py-0.5 text-[10px] font-bold">IA</span>':''}Ver explicación →</span>
       </div>
     </div>
   </article>`;
@@ -599,7 +599,7 @@ async function fromTitulares(){
     if(!r.ok || !(r.headers.get('content-type')||'').includes('json')) return null;
     const d = await r.json(); if(!d.items?.length) return null;
     state.hasBackend = true; state.freshAt = d.updated_at;
-    return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:null, live:true })) };
+    return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:null, shared:!!i.explicada, live:true })) };
   }catch(e){ return null; }
 }
 async function loadLive({ force=false, silent=false }={}){
@@ -655,7 +655,7 @@ function renderLive(ok, t){
   else if(!l.length){ empty.textContent='No hay noticias con ese filtro.'; empty.classList.remove('hidden'); }
   else empty.classList.add('hidden');
   $('#liveCount').textContent = state.live.length ? `(${state.live.length})` : '';
-  const nExp = state.live.filter(i=>i.exp || store.get('es_ia_'+hash(i.link||i.title))).length;
+  const nExp = state.live.filter(i=>i.exp || i.shared || store.get('es_ia_'+hash(i.link||i.title))).length;
   if(state.live.length && (state.freshAt||state.srvUpdated)){ $('#liveStatus').textContent = `${state.live.length} titulares · ${nExp} explicados con IA (el resto, con el motor automático) · el servidor revisó ${ok} de ${LIVE_SOURCES.length} medios ${ago(state.freshAt||state.srvUpdated)} · esta página se actualiza sola cada ${CONFIG.REFRESH_MIN} min.`; }
   else $('#liveStatus').textContent = state.live.length ? `${state.live.length} titulares · ${ok} de ${LIVE_SOURCES.length} medios respondieron · actualizado ${ago(new Date(t).toISOString())} · se actualiza solo cada ${CONFIG.REFRESH_MIN} min. Toca uno para que te lo expliquemos.` : '';
 }
@@ -667,15 +667,15 @@ function explain(n){
   if(ia) return { ...fromApi(ia), ia:true };
   return Motor.explicar({ title:n.title, summary:n.summary, topic:n.topic });   // motor gratuito
 }
-// Botón "✨ Explicar": pide a /api/explicar (Vercel + Claude) una explicación específica
-async function explainIA(n){
+// Botón "Explicar": pide a /api/explicar (Vercel + Claude) una explicación específica
+async function explainIA(n, soloGuardada=false){
   const r = await fetch('/api/explicar',{ method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ title:n.title, source:(SOURCES[n.src]||{}).name||'', date:n.date||'', summary:n.summary||'', link:n.link||'' }) });
+    body: JSON.stringify({ title:n.title, source:(SOURCES[n.src]||{}).name||'', date:n.date||'', summary:n.summary||'', link:n.link||'', soloGuardada }) });
   if(!(r.headers.get('content-type')||'').includes('json')) throw new Error('noapi');
   const j = await r.json(); if(!r.ok) throw new Error(j.error||'error');
   store.set('es_ia_'+hash(n.link||n.title), j); return j;
 }
-const iaButton = () => state.hasBackend ? `<button id="iaBtn" class="w-full mb-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-900 py-2.5 text-sm font-semibold">✨ Explicar</button>` : '';
+const iaButton = () => state.hasBackend ? `<button id="iaBtn" class="w-full mb-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-900 py-2.5 text-sm font-semibold">Explicar</button>` : '';
 function bindIA(n, boxSel){
   const b=$('#iaBtn'); if(!b) return;
   b.onclick = async () => {
@@ -707,6 +707,11 @@ function openLiveItem(id){
   const x = explain(n); if(!n.cat) n.cat = x.cat;
   openDrawer(head('Explicación') + `<div class="p-5 sm:p-6 fade-in">${newsHeader(n)}${x.ia?'':iaButton()}<div id="expBox">${analysisHTML(x)}</div></div>`);
   if(!x.ia) bindIA(n, '#expBox');
+  if(!x.ia && n.shared){                                // otro visitante ya la explicó: se trae gratis, sin tocar el botón
+    const b=$('#iaBtn'); if(b){ b.disabled=true; b.textContent='Cargando explicación…'; }
+    explainIA(n, true).then(j=>{ if(state.active!==n.id) return; $('#expBox').innerHTML = analysisHTML({ ...fromApi(j), ia:true }); $('#iaBtn')?.remove(); renderLive(...lastLiveArgs()); })
+      .catch(()=>{ const b=$('#iaBtn'); if(b){ b.disabled=false; b.textContent='Explicar'; } });
+  }
 }
 function openForm(){
   openDrawer(head('Explica una noticia') + `<div class="p-5 sm:p-6 fade-in">

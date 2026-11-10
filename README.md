@@ -7,9 +7,9 @@
 | Capa | Qué hace | Costo | Dónde funciona |
 |---|---|---|---|
 | ⚙️ **Motor de plantillas** (base) | Explica al instante en el navegador, a partir de palabras clave, cifras y dirección (sube / baja) | Gratis | En todas partes: Netlify, Vercel o abriendo el archivo |
-| ✨ **Claude** (mejora) | Un cron explica en segundo plano las noticias del día. El visitante puede tocar **"✨ Explicar"** en las que falten | ~US$0,0006 por noticia | Solo en Vercel, con tu clave |
+| **Claude** (mejora) | Un cron explica en segundo plano las noticias del día. El visitante puede tocar **"Explicar"** en las que falten | ~US$0,0006 por noticia | Solo en Vercel, con tu clave |
 
-Cuando una noticia ya tiene su explicación de Claude, se muestra esa con la etiqueta **"✨ Explicado con IA"**. Si no la tiene, se muestra la del motor con la etiqueta **"⚙️ Explicación automática"**. **Si Claude falla o se acaba el crédito, la página sigue funcionando con el motor.**
+Cuando una noticia ya tiene su explicación de Claude, se muestra esa con la etiqueta **"Explicado con IA"**. Si no la tiene, se muestra la del motor con la etiqueta **"⚙️ Explicación automática"**. **Si Claude falla o se acaba el crédito, la página sigue funcionando con el motor.**
 
 ```
 Visitante abre la URL
@@ -19,7 +19,7 @@ Visitante abre la URL
    │
    └─ Toca una noticia
         ├─ tiene explicación de Claude → la muestra
-        └─ no la tiene → motor gratuito al instante + botón "✨ Explicar" (si hay Vercel)
+        └─ no la tiene → motor gratuito al instante + botón "Explicar" (si hay Vercel)
 ```
 
 ## Archivos
@@ -32,7 +32,7 @@ econsimple/
 ├── api/
 │   ├── cron/actualizar.js        ← lee los RSS, explica con Claude solo lo NUEVO y guarda en Vercel Blob
 │   ├── noticias.js               ← entrega a la web las noticias ya explicadas
-│   ├── explicar.js               ← botón "✨ Explicar"
+│   ├── explicar.js               ← botón "Explicar"
 │   ├── rss.js                    ← lector de RSS de respaldo
 │   ├── _feeds.js / _claude.js / _prompt.js   ← medios, llamada a Claude e instrucciones
 └── .github/workflows/actualizar.yml   ← corre el cron cada 30 min gratis (opcional)
@@ -57,7 +57,7 @@ econsimple/
 |---|---|
 | `ANTHROPIC_API_KEY` | tu clave `sk-ant-…` (obligatoria) |
 | `CRON_SECRET` | una contraseña larga inventada (obligatoria) |
-| `ALLOWED_ORIGIN` | `https://econsimple.vercel.app`, tu URL final (recomendada: protege el botón "✨ Explicar") |
+| `ALLOWED_ORIGIN` | `https://econsimple.vercel.app`, tu URL final (recomendada: protege el botón "Explicar") |
 | `MAX_NUEVAS_POR_CORRIDA` | `15` (opcional: cuántas noticias explica cada corrida) |
 
 Luego toca **Deploy**.
@@ -73,7 +73,7 @@ Luego toca **Deploy**.
 ## Costo estimado con Claude (Haiku 5.5)
 - ~US$0,0006 por noticia explicada, y cada noticia se explica **una sola vez**, aunque la vean miles de personas.
 - Unas 200 noticias nuevas al día cuestan ~US$0,12 al día, unos US$3–4 al mes.
-- El botón "✨ Explicar" suma un costo similar por cada uso. Las mejoras quedan guardadas en el navegador del visitante.
+- El botón "Explicar" suma un costo similar por cada uso. Las mejoras quedan guardadas en el navegador del visitante.
 - Para gastar menos, baja `MAX_NUEVAS_POR_CORRIDA` o la frecuencia del cron.
 
 ## Personalizar
@@ -85,7 +85,7 @@ Luego toca **Deploy**.
 | Frecuencia de refresco de la página | `CONFIG.REFRESH_MIN` en `index.html` |
 
 ## Problemas frecuentes
-- **No aparece el botón "✨ Explicar":** estás en Netlify o abriendo el archivo local. Es normal: ahí solo funciona el motor gratuito.
+- **No aparece el botón "Explicar":** estás en Netlify o abriendo el archivo local. Es normal: ahí solo funciona el motor gratuito.
 - **"No se pudo explicar ahora":** revisa `ANTHROPIC_API_KEY` y tu crédito en la consola de Anthropic; el detalle aparece en **Vercel → Logs**. La explicación del motor sigue visible.
 - **El cron responde 401:** `CRON_SECRET` no coincide entre Vercel y GitHub.
 - **Error de Blob en el cron:** falta conectar Blob (paso 4) o hacer Redeploy.
