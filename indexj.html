@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EconSimple · Economía y política de Chile, explicadas en simple</title>
+<meta name="description" content="Noticias económicas y políticas de Chile explicadas en palabras simples: qué pasó, cómo afecta al país y cómo afecta a tu bolsillo.">
+<meta name="theme-color" content="#0f1b2d">
+<meta property="og:title" content="EconSimple">
+<meta property="og:description" content="Economía y política de Chile, explicadas en simple.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23fbbf24'/%3E%3Cpath d='M18 42 L28 30 L36 36 L46 22' stroke='%230f1b2d' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  fontFamily: { sans:['Inter','system-ui','sans-serif'], display:['Fraunces','Georgia','serif'] },
+  colors: { ink:'#0f1b2d', paper:'#f6f4ef' } } } }
+</script>
+<style>
+  body { background:#f6f4ef; }
+  .drawer { transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+  .card { transition: transform .15s ease, box-shadow .15s ease, border-color .15s; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -12px rgba(15,27,45,.25); }
+  .card.active { border-color:#0f1b2d; box-shadow: 0 0 0 2px #0f1b2d; }
+  .scrollbar-thin::-webkit-scrollbar { width:8px; height:8px }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background:#cfc9bc; border-radius:8px }
+  .fade-in { animation: fade .25s ease both } @keyframes fade { from {opacity:0; transform:translateY(4px)} to {opacity:1; transform:none} }
+  .pulse-dot { animation: pd 1.6s infinite } @keyframes pd { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body class="font-sans text-ink antialiased min-h-screen flex flex-col">
+
+<!-- ============ CONFIGURACIÓN (edita aquí) ============ -->
+<script>
+const CONFIG = {
+  // Clave gratuita opcional de rss2json.com (permite traer más noticias por medio). Déjala vacía si no tienes.
+  RSS2JSON_KEY: '',
+  // Cuántas noticias mostrar por medio en "En vivo".
+  ITEMS_PER_SOURCE: 8,   // máximo por medio (hay 11 medios entre economía y política)
+  // Minutos que se guardan las noticias en el navegador antes de volver a pedirlas.
+  CACHE_MIN: 1,          // si la última carga tiene menos de 1 min, no se vuelve a pedir al abrir
+  REFRESH_MIN: 2,        // mientras la página esté abierta, se buscan titulares nuevos cada 2 min
+};
+// Medios del modo "En vivo". "rss" es el feed directo del medio (si cambia, actualízalo aquí).
+// Si el feed directo falla o está vacío, se usa automáticamente Google News filtrado por el dominio ("site").
+const ECO = 'economía OR bolsa OR dólar OR IPC OR inflación OR fondos OR IPSA OR acciones OR AFP';
+const POL = 'gobierno OR Congreso OR Senado OR Cámara OR ministro OR ministra OR Presupuesto OR acusación OR "La Moneda" OR partido';
+const LIVE_SOURCES = [
+  // ---- Economía ----
+  { id:'df',      topic:'eco', name:'Diario Financiero',  short:'DF',     dot:'#1a7a4f', color:'bg-[#e8f1ec] text-[#125b3a] border-[#b9d7c6]', site:'df.cl',          rss:'https://www.df.cl/noticias/site/list/port/rss.xml', query:'' },
+  { id:'emol',    topic:'eco', name:'Emol Economía',      short:'EMOL',   dot:'#2756b8', color:'bg-[#e7eefb] text-[#1d4596] border-[#bccbee]', site:'emol.com',       rss:'', query:ECO },
+  { id:'lt',      topic:'eco', name:'La Tercera · Pulso', short:'PULSO',  dot:'#c62828', color:'bg-[#fbeaea] text-[#9b1c1c] border-[#efc1c1]', site:'latercera.com',  rss:'https://www.latercera.com/arc/outboundfeeds/rss/category/pulso/?outputType=xml', query:ECO },
+  { id:'cnn',     topic:'eco', name:'CNN Chile Economía', short:'CNN',    dot:'#cc0000', color:'bg-[#f1f1f1] text-[#1f1f1f] border-[#d4d4d4]', site:'cnnchile.com',   rss:'', query:ECO },
+  { id:'bcch',    topic:'eco', name:'Banco Central',      short:'BCCh',   dot:'#0e7489', color:'bg-[#e6f3f5] text-[#0b5563] border-[#b5dbe1]', site:'bcentral.cl',    rss:'', query:'' },
+  // ---- Política ----
+  { id:'emolpol', topic:'pol', name:'Emol Nacional',      short:'EMOL',   dot:'#2756b8', color:'bg-[#e7eefb] text-[#1d4596] border-[#bccbee]', site:'emol.com',       rss:'', query:POL },
+  { id:'ltpol',   topic:'pol', name:'La Tercera Política',short:'LT',     dot:'#c62828', color:'bg-[#fbeaea] text-[#9b1c1c] border-[#efc1c1]', site:'latercera.com',  rss:'https://www.latercera.com/arc/outboundfeeds/rss/category/politica/?outputType=xml', query:POL },
+  { id:'cnnpol',  topic:'pol', name:'CNN Chile Política', short:'CNN',    dot:'#cc0000', color:'bg-[#f1f1f1] text-[#1f1f1f] border-[#d4d4d4]', site:'cnnchile.com',   rss:'', query:POL },
+  { id:'biobio',  topic:'pol', name:'BioBioChile',        short:'BIOBIO', dot:'#0d6efd', color:'bg-[#e8f0fe] text-[#0b3d91] border-[#c3d4f7]', site:'biobiochile.cl', rss:'', query:POL },
+  { id:'mostrador',topic:'pol',name:'El Mostrador',       short:'EM',     dot:'#b91c1c', color:'bg-[#fdecec] text-[#7f1d1d] border-[#f5c2c2]', site:'elmostrador.cl', rss:'', query:POL },
+  { id:'exante',  topic:'pol', name:'Ex-Ante',            short:'EX-ANTE',dot:'#7c3aed', color:'bg-[#f3eefe] text-[#4c1d95] border-[#ddd0fb]', site:'ex-ante.cl',     rss:'https://www.ex-ante.cl/feed/', query:POL },
+];
+</script>
+
+<!-- HEADER -->
+<header class="bg-ink text-white sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+    <a href="#" class="flex items-center gap-2.5 shrink-0" aria-label="EconSimple, inicio">
+      <span class="w-9 h-9 rounded-xl bg-amber-400 grid place-items-center">
+        <svg viewBox="0 0 64 64" class="w-6 h-6"><path d="M14 44 L27 30 L36 37 L50 20" stroke="#0f1b2d" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="leading-tight">
+        <span class="block font-display font-bold text-xl tracking-tight">Econ<span class="text-amber-400">Simple</span></span>
+        <span class="hidden sm:block text-[11px] text-slate-400 -mt-0.5">Economía y política de Chile, explicadas en simple</span>
+      </span>
+    </a>
+    <button id="openLive" class="ml-auto rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-sm font-medium whitespace-nowrap"><span class="hidden sm:inline">Explica una noticia</span><span class="sm:hidden">Explicar</span></button>
+  </div>
+</header>
+
+<main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  <!-- Intro -->
+  <section class="mb-6">
+    <h1 class="font-display text-3xl sm:text-4xl font-bold leading-tight">Lo que mueve a Chile, <span class="text-amber-600">sin enredos</span></h1>
+    <p class="text-stone-600 mt-2 max-w-2xl">Economía y política del día, con tres preguntas respondidas: <b>¿qué pasó, en palabras simples?</b>, <b>¿cómo afecta a Chile?</b> y <b>¿cómo afecta a tu bolsillo?</b> Siempre con el enlace al medio original.</p>
+  </section>
+
+  <!-- Tabs -->
+  <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
+    <div class="inline-flex rounded-xl border border-stone-300 bg-white p-1 text-sm" role="tablist">
+      <button data-tab="vivo" class="tab px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500 pulse-dot"></span>Últimos titulares <span id="liveCount" class="text-[11px] opacity-70"></span></button>
+      <button data-tab="explicadas" class="tab px-4 py-2 rounded-lg font-medium">💡 Explicadas</button>
+    </div>
+    <div class="relative w-full sm:w-72">
+      <input id="search" type="search" placeholder="Buscar: dólar, IPSA, AFP, UF…" class="w-full rounded-xl border border-stone-300 bg-white pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30">
+      <span class="absolute left-3 top-2.5 text-stone-400">⌕</span>
+    </div>
+  </div>
+
+  <!-- EXPLICADAS -->
+  <section id="tab-explicadas" class="tabpane">
+    <div id="catFilters" class="flex flex-wrap gap-1.5 mb-4"></div>
+    <div id="grid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    <p id="emptyCur" class="hidden text-center py-12 text-stone-500">No hay noticias con ese filtro.</p>
+  </section>
+
+  <!-- EN VIVO -->
+  <section id="tab-vivo" class="tabpane hidden">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+      <div class="flex flex-col gap-2"><div id="liveTopics" class="inline-flex rounded-xl border border-stone-300 bg-white p-1 text-sm w-fit"></div><div id="liveSources" class="flex flex-wrap gap-1.5"></div></div>
+      <button id="refresh" class="text-sm rounded-lg border border-stone-300 bg-white px-3 py-1.5 hover:border-stone-500">↻ Actualizar</button>
+    </div>
+    <p id="liveStatus" class="text-xs text-stone-500 mb-4"></p>
+    <div id="liveGrid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    <div id="liveEmpty" class="hidden text-center py-12 text-stone-500 text-sm"></div>
+  </section>
+</main>
+
+<footer class="border-t border-stone-200 bg-white/60 mt-10">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 text-xs text-stone-500 space-y-2">
+    <p><b class="text-ink">EconSimple</b> resume y explica noticias publicadas por otros medios. Los titulares, resúmenes y artículos pertenecen a sus respectivos medios: lee siempre la nota completa en el enlace original.</p>
+    <p>Las explicaciones de los últimos titulares se arman automáticamente en tu navegador a partir del titular y el resumen de cada medio, con plantillas por tema: pueden no captar todos los matices. EconSimple no entrega asesoría financiera ni de inversión; las rentabilidades pasadas no garantizan las futuras.</p>
+  </div>
+</footer>
+
+<!-- DRAWER -->
+<div id="overlay" class="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-40 hidden"></div>
+<aside id="drawer" class="drawer fixed z-50 bg-paper shadow-2xl inset-x-0 bottom-0 max-h-[92vh] rounded-t-3xl translate-y-full
+  md:top-0 md:bottom-0 md:right-0 md:left-auto md:h-screen md:w-[560px] md:max-h-screen md:rounded-none md:translate-y-0 md:translate-x-full overflow-y-auto overscroll-contain scrollbar-thin" aria-hidden="true">
+  <div id="drawerBody"></div>
+</aside>
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink text-white text-sm px-4 py-2 rounded-lg shadow-lg z-[60] hidden"></div>
+
+<script>
+/* ============ FUENTES DE LAS NOTICIAS EXPLICADAS ============ */
+const SOURCES = {
+  emol:  { name:'Emol', short:'EMOL', color:'bg-[#e7eefb] text-[#1d4596] border-[#bccbee]', dot:'#2756b8' },
+  pauta: { name:'Pauta', short:'PAUTA', color:'bg-[#fff4e5] text-[#8a4b00] border-[#f2d2a6]', dot:'#d97706' },
+  aafp:  { name:'Asociación de AFP', short:'AAFP', color:'bg-[#eaf6f4] text-[#0f5a4f] border-[#bfe0da]', dot:'#13806f' },
+  cmf:   { name:'CMF', short:'CMF', color:'bg-[#eef2f7] text-[#1e3a5f] border-[#c9d5e4]', dot:'#1e3a5f' },
+  forbes:{ name:'Forbes Chile', short:'FORBES', color:'bg-[#f3f4f6] text-[#111827] border-[#d1d5db]', dot:'#111827' },
+  mch:   { name:'Minería Chilena', short:'MCH', color:'bg-[#fdf0e6] text-[#8a3b0c] border-[#f1cfb5]', dot:'#c2570c' },
+};
+LIVE_SOURCES.forEach(s => { SOURCES['live_'+s.id] = s; });
+const CATS = { 'Crecimiento':'🏗️','Mercados':'📈','Acciones y empresas':'📊','Fondos e inversión':'💼','Política monetaria':'🏦','Inflación':'🛒','Empleo':'👷','Vivienda':'🏠','Internacional':'🌎','Materias primas':'⛏️','Energía':'⛽','Fiscal':'🏛️','Pensiones':'🧓','Empresas':'🏢','Política':'🗳️','Otro':'🗂️' };
+
+/* ============ NOTICIAS EXPLICADAS (selección con enlaces reales) ============ */
+const CURATED = [
+ { id:4, src:'emol', cat:'Crecimiento', date:'2026-08-18T08:44:00-04:00',
+   title:'Chile, ¿en recesión técnica?: La caída del PIB reabre el viejo debate sobre cómo medirla',
+   summary:'El PIB cayó 0,2% anual en el segundo trimestre y el primero se corrigió a -0,3%, con lo que suma dos trimestres de caída. Los economistas discrepan sobre si eso es una recesión técnica según la medición trimestral desestacionalizada. La minería cayó por menor producción de cobre, mientras el resto de la economía creció levemente.',
+   link:'https://www.emol.com/noticias/Economia/2026/08/18/1208875/recesion-tecnica-debate.html', tone:'negativo',
+   simple:'Se habla de "recesión técnica" cuando la economía de un país produce menos durante dos trimestres seguidos, es decir, seis meses. Eso le pasó a Chile en la primera mitad de 2026, sobre todo porque las mineras sacaron menos cobre. Los economistas discuten si técnicamente cuenta como recesión, pero coinciden en lo importante: la economía está estancada y crece menos de lo esperado.',
+   pais:['Dos trimestres seguidos de caída del PIB confirman un primer semestre de estancamiento y rebajan las proyecciones de crecimiento para 2026.','La caída se concentró en la minería por menor producción de cobre; el resto de la economía creció levemente, lo que matiza el diagnóstico.','Una economía débil reduce la recaudación de impuestos y aumenta la presión para que el Banco Central baje la tasa de interés.'],
+   bolsillo:[{t:'Empleo más difícil',d:'Con la economía estancada, las empresas contratan menos y encontrar trabajo puede tomar más tiempo.'},{t:'Cuida tus deudas',d:'En períodos débiles conviene evitar deudas nuevas caras y, si puedes, reforzar tu fondo de emergencia.'},{t:'Créditos podrían abaratarse',d:'Si el Banco Central responde bajando la tasa, los créditos podrían ser más baratos en los próximos meses.'}],
+   terms:[{t:'Recesión técnica',d:'Dos trimestres seguidos en que la economía de un país produce menos.'},{t:'PIB',d:'Valor de todo lo que produce un país en un período.'},{t:'Desestacionalizado',d:'Cifra ajustada para quitar efectos de temporada, como feriados o vacaciones.'}] },
+ { id:11, src:'pauta', cat:'Crecimiento', date:'2026-11-03T12:00:00-03:00', dateOnly:true,
+   title:'José De Gregorio advierte sobre el deterioro de la economía chilena: “Está en una recesión y la ha tenido este año”',
+   summary:'El expresidente del Banco Central calificó el desempeño económico de 2026 como muy pobre y por debajo de lo proyectado. Lo atribuye más a factores internos, como la pérdida de confianza y la débil inversión, que a causas externas, y no descartaría una baja de la tasa de interés.',
+   link:'https://www.pauta.cl/actualidad/2026/11/03/jose-de-gregorio-advierte-sobre-el-deterioro-de-la-economia-chilena-esta-en-una-recesion-y-la-ha-tenido-este-ano.html', tone:'negativo',
+   simple:'José De Gregorio, que fue presidente del Banco Central, dice que este año la economía chilena ha estado en recesión: produce poco y crece bastante menos de lo esperado. Según él, la causa principal no viene de afuera, sino de que personas y empresas tienen poca confianza y están invirtiendo poco. Por eso sugiere evaluar una baja de la tasa de interés para reactivar la economía.',
+   pais:['Que un expresidente del Banco Central hable de recesión aumenta la presión por medidas para reactivar la economía.','Si la causa es la baja confianza e inversión, la recuperación depende de que empresas y hogares vuelvan a gastar e invertir.','El Banco Central enfrenta un dilema: la economía débil pide bajar la tasa, pero la inflación sigue sobre la meta de 3%.'],
+   bolsillo:[{t:'Atento a la tasa',d:'Si el Banco Central baja la tasa, los créditos de consumo e hipotecarios podrían abaratarse, y los depósitos a plazo rendirían menos.'},{t:'Trabajo para jóvenes',d:'De Gregorio menciona el desempleo juvenil, incluso entre profesionales: buscar empleo puede tomar más tiempo.'},{t:'Precios todavía altos',d:'Aunque la economía crece poco, la inflación sigue sobre la meta, así que los precios no bajan.'}],
+   terms:[{t:'Recesión',d:'Período en que la economía de un país produce menos y se debilita.'},{t:'Inversión',d:'Gasto de las empresas en máquinas, edificios y proyectos para producir más en el futuro.'}] },
+ { id:13, src:'emol', cat:'Mercados', date:'2026-11-06T20:06:00-03:00',
+   title:'Wall Street y bolsas asiáticas golpeadas: Qué explica la caída y cuánto perdieron las grandes tecnológicas',
+   summary:'El Nasdaq cayó 5,52% el jueves 5 de noviembre, su peor jornada desde abril de 2025, por una ola de ventas de acciones tecnológicas y dudas sobre el futuro de las inversiones en inteligencia artificial tras las elecciones legislativas en EE.UU. Tesla (-10,8%) y Nvidia (-9,3%) lideraron las caídas, y las bolsas de Asia también retrocedieron.',
+   link:'https://www.emol.com/noticias/Economia/2026/11/06/1216331/bolsas-asia-eeuu-caida-tecnologia.html', tone:'negativo',
+   simple:'En Estados Unidos se vendieron masivamente acciones de empresas tecnológicas, como Nvidia y Tesla, que habían subido mucho por el entusiasmo con la inteligencia artificial. Los inversionistas empezaron a dudar de que esas empresas sigan creciendo tan rápido, y cuando muchos venden al mismo tiempo, los precios caen fuerte. El golpe se sintió también en las bolsas de Asia.',
+   pais:['Las caídas en Wall Street suelen generar nerviosismo global y pueden presionar a la bolsa chilena en los días siguientes.','En momentos de temor, los inversionistas buscan refugio en el dólar, lo que puede hacer subir su precio en Chile.','La bolsa chilena tiene poca exposición directa a empresas tecnológicas, lo que amortigua parte del impacto local.'],
+   bolsillo:[{t:'Revisa tu fondo sin pánico',d:'Los fondos A y B de las AFP y los fondos mutuos internacionales tienen acciones de EE.UU. y pueden caer; vender en el peor momento suele concretar la pérdida.'},{t:'No todo en un sector',d:'Si tienes acciones o ETF de tecnología, estas caídas son parte de su riesgo: conviene repartir tus inversiones.'}],
+   terms:[{t:'Nasdaq',d:'Índice de la bolsa de EE.UU. donde pesan mucho las empresas tecnológicas.'},{t:'Wall Street',d:'Forma de referirse al mercado bursátil de Estados Unidos.'}] },
+ { id:14, src:'aafp', cat:'Fondos e inversión', date:'2026-11-03T12:00:00-03:00', dateOnly:true,
+   title:'Fondo E lidera la recuperación de Multifondos en octubre con alza real de 3,2%',
+   summary:'En octubre, el Fondo E rentó 3,2% real, el D 1,8% y el C 1,0%, mientras el A cayó 0,3% y el B quedó en 0,0%. Los fondos con más bonos se beneficiaron de la baja de las tasas de interés de largo plazo; los con más acciones sufrieron por las caídas bursátiles, incluido un retroceso de 6,5% del IPSA. En el año, A y B siguen en positivo y el E acumula -7,6%.',
+   link:'https://www.aafp.cl/?p=20300', tone:'mixto',
+   simple:'Tus ahorros de la AFP están en uno de cinco fondos, del A (más riesgoso, con más acciones) al E (más conservador, con más bonos). En octubre ganaron más los fondos conservadores, porque bajaron las tasas de interés y eso hace subir el valor de los bonos. Los más riesgosos quedaron planos o con una leve pérdida porque las bolsas cayeron ese mes.',
+   pais:['La recuperación de los fondos conservadores alivia a quienes están cerca de jubilar, que suelen estar en los fondos D y E.','La caída de las tasas de largo plazo en Chile y EE.UU. apunta a un ambiente financiero algo menos exigente.','El retroceso del IPSA en octubre muestra que la bolsa chilena también tuvo un mes difícil.'],
+   bolsillo:[{t:'Mira tu fondo en el año',d:'Un mes no define tu pensión: en lo que va de 2026, el A y el B siguen en positivo y el E todavía acumula pérdidas.'},{t:'No cambies por un mes',d:'Cambiarse de fondo siguiendo el último resultado suele llegar tarde; tu fondo debería depender de tu edad y de cuánto riesgo toleras.'}],
+   terms:[{t:'Multifondos',d:'Los cinco fondos de las AFP (A al E), ordenados de más a menos riesgo.'},{t:'Rentabilidad real',d:'Lo que ganó un fondo descontando la inflación.'},{t:'Renta fija',d:'Inversiones en bonos, que pagan intereses conocidos.'}] },
+ { id:15, src:'cmf', cat:'Fondos e inversión', date:'2026-10-19T12:00:00-03:00', dateOnly:true,
+   title:'CMF actualiza el Portal de Fondos Mutuos con información a junio de 2026',
+   summary:'Al cierre de junio de 2026, los fondos mutuos administraban US$100.884 millones, 6,1% más que a inicios de año, repartidos en 441 fondos. Los fondos de deuda de menos de 90 días en pesos rentaron 1,99% en el período del informe, equivalente a -0,7% real.',
+   link:'https://cmfchile.cl/portal/prensa/625/w4-article-114271.html', tone:'neutral',
+   simple:'Un fondo mutuo junta el dinero de muchas personas para invertirlo en conjunto, administrado por profesionales. La CMF, el organismo que fiscaliza a estas empresas, informó que el dinero invertido en fondos mutuos en Chile sigue creciendo. También mostró que los fondos más seguros, que invierten a muy corto plazo, ganaron menos que la inflación en ese período.',
+   pais:['El crecimiento de los fondos mutuos muestra que más chilenos invierten sus ahorros, lo que aporta financiamiento a empresas y al Estado.','Que los fondos de muy corto plazo rindan bajo la inflación refleja tasas de interés que no compensaron el alza de precios en ese período.'],
+   bolsillo:[{t:'"Seguro" no siempre gana',d:'Un fondo de muy bajo riesgo protege de caídas, pero puede ganar menos que la inflación: sirve para emergencias, no necesariamente para hacer crecer tus ahorros.'},{t:'Compara antes de elegir',d:'El Portal de Fondos Mutuos de la CMF permite comparar rentabilidad y costos de los fondos antes de invertir.'}],
+   terms:[{t:'Fondo mutuo',d:'Fondo que junta el dinero de muchas personas para invertirlo en conjunto.'},{t:'CMF',d:'Comisión para el Mercado Financiero: fiscaliza bancos, fondos, seguros y la bolsa.'}] },
+ { id:12, src:'emol', cat:'Mercados', date:'2026-11-04T17:12:00-03:00',
+   title:'Bolsas de EE.UU. y Chile suben con fuerza, el petróleo se desploma y el dólar cae $16 tras triunfo demócrata',
+   summary:'El IPSA subió 2,52% y cerró en 10.627,08 puntos, en línea con el optimismo internacional tras el triunfo demócrata en las elecciones de medio término de EE.UU. LATAM lideró con un salto de 7,7%, favorecida por la fuerte caída del petróleo (el Brent bajó 8,67%), mientras el cobre se recuperó a US$6,44 la libra.',
+   link:'https://www.emol.com/noticias/Economia/2026/11/04/1216144/bolsa-santiago-ipsa-cierre-verde.html', tone:'positivo',
+   simple:'El IPSA es un indicador que resume cómo les va a las principales empresas que se transan en la Bolsa de Santiago, y ese día subió con fuerza. Tras las elecciones legislativas en Estados Unidos, los inversionistas se animaron a comprar acciones en todo el mundo. Además, el petróleo bajó mucho, y eso ayuda a empresas como LATAM, porque el combustible es uno de sus mayores gastos.',
+   pais:['La llegada de inversionistas extranjeros valoriza a las empresas chilenas y les facilita conseguir financiamiento.','Un petróleo más barato podría aliviar la inflación en Chile, porque abarata el transporte y los combustibles.','El alza muestra que la bolsa chilena también se mueve por noticias de afuera, no solo por la economía local.'],
+   bolsillo:[{t:'Fondos A y B de tu AFP',d:'Si tus ahorros tienen acciones chilenas, jornadas como esta los hacen subir; pero un solo día no define el resultado de largo plazo.'},{t:'Bencina más barata',d:'Si el petróleo se mantiene bajo, en las próximas semanas podría notarse en el precio de los combustibles.'}],
+   terms:[{t:'IPSA',d:'Índice que reúne a las principales acciones de la Bolsa de Santiago.'},{t:'Brent',d:'Tipo de petróleo que sirve de referencia para el precio mundial.'},{t:'Elecciones de medio término',d:'Elecciones del Congreso de EE.UU. a mitad del período presidencial.'}] },
+ { id:16, src:'forbes', cat:'Acciones y empresas', date:'2026-11-04T12:00:00-03:00', dateOnly:true,
+   title:'LATAM alcanza US$441 millones de utilidades en tercer trimestre de 2026',
+   summary:'LATAM Airlines Group ganó US$441 millones entre julio y septiembre, 16,3% más que un año antes, y elevó sus proyecciones para 2026. Pese a eso, su margen operacional ajustado bajó de 18,1% a 12,5%, porque el combustible promedio fue 52,1% más caro, con un impacto de unos US$520 millones.',
+   link:'https://forbes.cl/negocios/2026-11-04/latam-alcanza-us441-millones-de-utilidades-en-tercer-trimestre-de-2026/', tone:'positivo',
+   simple:'LATAM, la aerolínea más grande de Sudamérica y una de las empresas más importantes de la bolsa chilena, ganó más dinero que hace un año. Vendió más pasajes y vuelos, pero el combustible le salió mucho más caro, así que de cada peso que vende le queda una parte menor como ganancia. Aun así, la empresa espera terminar el año mejor de lo que pensaba.',
+   pais:['Los buenos resultados de una de las empresas más grandes del IPSA tienden a apoyar a la bolsa chilena.','El fuerte impacto del combustible muestra cómo el precio del petróleo pesa sobre las empresas de transporte del país.','Más vuelos y pasajeros reflejan actividad en turismo y conectividad, aunque la economía general crece poco.'],
+   bolsillo:[{t:'Si tienes acciones de LATAM',d:'Las utilidades y proyecciones influyen en el precio de la acción, pero un buen trimestre no garantiza que suba.'},{t:'Pasajes y combustible',d:'Con el combustible caro, las aerolíneas tienden a mantener altos los precios de los pasajes.'}],
+   terms:[{t:'Utilidad neta',d:'Lo que gana una empresa después de pagar todos sus costos e impuestos.'},{t:'Margen operacional',d:'Parte de cada peso vendido que queda como ganancia de la operación.'}] },
+ { id:17, src:'mch', cat:'Acciones y empresas', date:'2026-08-19T14:25:00-03:00',
+   title:'SQM dispara sus utilidades en el primer semestre 2026 impulsada por récord en litio',
+   summary:'SQM ganó US$1.024,7 millones en el primer semestre, 353,5% más que un año antes, con ingresos de US$4.228,5 millones. El precio promedio del litio subió cerca de 160% frente al segundo trimestre de 2025, y la empresa espera que la demanda mundial supere los 2,1 millones de toneladas en 2026.',
+   link:'https://www.mch.cl/sqm-dispara-sus-utilidades-en-el-primer-semestre-2026-impulsada-por-record-en-litio/', tone:'positivo',
+   simple:'SQM es una de las mayores productoras de litio del mundo, el mineral que se usa en las baterías de autos eléctricos y en sistemas para guardar energía. Este año el litio se volvió a vender mucho más caro y SQM vendió volúmenes récord, así que sus ganancias se multiplicaron. Como SQM pesa mucho en la bolsa chilena, sus resultados mueven al IPSA.',
+   pais:['Un litio más caro aumenta los ingresos del Estado, que recibe pagos por la explotación del Salar de Atacama.','SQM planea inversiones por unos US$3.000 millones entre 2026 y 2028, lo que puede generar empleo en el norte.','El litio se consolida como la segunda gran apuesta minera de Chile después del cobre.'],
+   bolsillo:[{t:'Fondos con acciones chilenas',d:'SQM es una de las empresas con más peso en el IPSA: sus alzas y caídas se notan en los fondos A y B y en fondos mutuos accionarios.'},{t:'Precio que sube y baja',d:'El litio es muy volátil: tras años de precios bajos hoy está caro, pero puede volver a caer.'}],
+   terms:[{t:'Litio',d:'Mineral clave para fabricar baterías recargables.'},{t:'SQM',d:'Empresa chilena productora de litio, yodo y fertilizantes.'}] },
+ { id:18, src:'emol', cat:'Mercados', date:'2026-11-06T15:10:00-03:00',
+   title:'Dólar anota leve alza y cierra una volátil semana por debajo de los $980',
+   summary:'El dólar subió $2,1 el viernes y terminó en torno a $978, tras una semana de fuertes vaivenes por las elecciones en EE.UU. y la caída de las acciones tecnológicas. Lo moderó el mejor ánimo bursátil y que Hacienda elevó a hasta US$1.000 millones semanales sus ventas de dólares en noviembre.',
+   link:'https://www.emol.com/noticias/Economia/2026/11/06/1216355/dolar-volatil-semanal-980.html', tone:'neutral',
+   simple:'El dólar tuvo una semana de subidas y bajadas fuertes: bajó cuando los inversionistas estaban optimistas y subió cuando se asustaron por la caída de las tecnológicas en Estados Unidos. Al final quedó cerca de $978. Además, el Gobierno está vendiendo más dólares este mes, y cuando hay más dólares a la venta su precio tiende a bajar.',
+   pais:['Un dólar cerca de $980 encarece lo importado, como combustibles, tecnología y algunos alimentos, y puede presionar la inflación.','Las ventas de dólares de Hacienda buscan financiar al Fisco y, de paso, agregan oferta que modera el precio.'],
+   bolsillo:[{t:'Compras en dólares',d:'Viajes, compras online en el extranjero y suscripciones en dólares siguen caras: si puedes, compra dólares de a poco y no todo de una vez.'},{t:'Ahorros en dólares',d:'Si tienes ahorros en dólares, valen más pesos cuando el dólar sube, pero su precio cambia todos los días.'}],
+   terms:[{t:'Tipo de cambio',d:'Cuántos pesos chilenos se necesitan para comprar un dólar.'},{t:'Hacienda',d:'Ministerio a cargo de las finanzas del Estado.'}] },
+ { id:19, src:'emol', cat:'Inflación', date:'2026-11-06T08:09:00-03:00',
+   title:'IPC de octubre sube 0,5% e inflación anual se acelera a 4,5%, lejos de la meta del Banco Central',
+   summary:'Los precios subieron 0,5% en octubre, tal como esperaba el mercado, y la inflación en 12 meses llegó a 4,5%, alejándose de la meta de 3% del Banco Central. El alza la explicaron sobre todo el transporte (la gasolina subió 4,5% y los pasajes aéreos internacionales 13%) y los alimentos, con papas y tomates más caros.',
+   link:'https://www.emol.com/noticias/Economia/2026/11/06/1216291/ipc-inflacion-economia-ine.html', tone:'negativo',
+   simple:'El IPC mide cuánto cambian, mes a mes, los precios de lo que compra una familia típica. En octubre esas compras costaron 0,5% más, sobre todo por la bencina, los pasajes de avión y verduras como la papa y el tomate. En un año, los precios han subido 4,5%, bastante más que el 3% que busca el Banco Central: a tu sueldo le alcanza para un poco menos.',
+   pais:['Una inflación de 4,5% hace menos probable que el Banco Central baje pronto la tasa de interés, aunque la economía crezca poco.','El alza de los combustibles se traspasa al transporte y a casi todos los productos, lo que prolonga la presión sobre los precios.','La UF incorporará este dato y subirá más rápido el próximo mes, encareciendo contratos y deudas en UF.'],
+   bolsillo:[{t:'Bencina y pasajes más caros',d:'Llenar el estanque y viajar en avión costó más; comparar precios entre estaciones y reservar con tiempo ayuda.'},{t:'Feria y supermercado',d:'Papas, tomates y verduras subieron fuerte: comprar en temporada y en ferias puede amortiguar el golpe.'},{t:'Arriendo y dividendo en UF',d:'Si pagas en UF, en las próximas semanas pagarás algo más en pesos por lo mismo.'}],
+   terms:[{t:'IPC',d:'Índice que mide cuánto cambian los precios de una canasta típica de compras.'},{t:'Meta de inflación',d:'El Banco Central busca que los precios suban en torno a 3% al año.'}] },
+
+ { id:20, src:'emol', cat:'Política', date:'2026-11-06T21:45:00-03:00',
+   title:'De Reconstrucción al Presupuesto: Quiroz acelera negociaciones y consigue destrabar acuerdos',
+   summary:'La Comisión Especial Mixta despachó el Presupuesto 2027 tras cinco jornadas. Hacienda negoció más recursos para gobiernos regionales, Servel y Contraloría, pero quedaron sin respaldo fondos para Educación, Ciencia, Atención Primaria de Salud y subsidios al empleo para mujeres y jóvenes. Desde el 9 de noviembre lo discute la Sala de la Cámara de Diputados.',
+   link:'https://www.emol.com/noticias/Nacional/2026/11/06/1216334/rapidez-tramitacion-congreso.html', tone:'mixto',
+   simple:'El Presupuesto es el plan de cuánto dinero gastará el Estado el próximo año y en qué: colegios, hospitales, subsidios, regiones. Cada año el Gobierno lo propone y el Congreso lo revisa partida por partida. Una comisión de diputados y senadores ya aprobó la mayor parte, pero rechazó varios montos, como los de Educación y Ciencia. Ahora lo vota la Cámara, y el Gobierno tendrá que negociar para reponer lo rechazado.',
+   pais:['El Presupuesto define cuánto gasta el Estado en 2027; los recortes o aumentos se sienten en servicios públicos y programas sociales.','Que varias partidas fueran rechazadas obliga al Gobierno a negociar con los distintos partidos en la Cámara y el Senado.','Más recursos y flexibilidad para los gobiernos regionales les permiten invertir y responder a emergencias desde enero.'],
+   bolsillo:[{t:'Programas que podrían cambiar',d:'Subsidios al empleo para mujeres y jóvenes, y recursos de atención primaria de salud, siguen en discusión: su monto final aún no está definido.'},{t:'Proyectos en tu región',d:'Los fondos adicionales para gobiernos regionales pueden traducirse en obras e inversión local el próximo año.'}],
+   terms:[{t:'Ley de Presupuestos',d:'Ley anual que fija cuánto puede gastar el Estado y en qué.'},{t:'Partida',d:'Cada capítulo del Presupuesto, normalmente uno por ministerio o servicio.'},{t:'Comisión Mixta',d:'Grupo de diputados y senadores que revisa un proyecto en conjunto.'}] },
+
+ { id:21, src:'emol', cat:'Política', date:'2026-11-08T07:11:00-03:00',
+   title:'Foco | La semana de presiones (y descartes) por un cambio de gabinete tras la crisis por rebajas',
+   summary:'La crisis por la rebaja de condenas mantiene bajo presión al Gobierno. RN y otros partidos de Chile Vamos pidieron cambios en el equipo político; el Presidente Kast y el Ejecutivo descartaron un cambio de gabinete y respaldan al ministro de Justicia, Fernando Rabat. La oposición anunció una acusación constitucional contra él, aún sin fecha, y la postura del PDG será clave.',
+   link:'https://www.emol.com/noticias/Nacional/2026/11/08/1216323/foco-cambio-gabinete-kast-crisis.html', tone:'neutral',
+   simple:'El ministro de Justicia está cuestionado por decretos que rebajaron condenas a personas condenadas por abusos contra menores. La oposición quiere presentar una acusación constitucional, un juicio político del Congreso que puede sacar a un ministro de su cargo. Algunos partidos que apoyan al Gobierno piden cambios en el equipo de La Moneda, mientras el Presidente dice que no hará un cambio de gabinete. Todavía no está claro si habrá votos suficientes.',
+   pais:['Una crisis política prolongada le quita tiempo y apoyo al Gobierno para negociar otros proyectos en el Congreso, como el Presupuesto 2027.','El resultado de una eventual acusación dependerá de partidos que no están ni en el Gobierno ni en la oposición, como el PDG.','Un eventual cambio de gabinete podría modificar quiénes conducen la agenda política y legislativa.'],
+   bolsillo:[{t:'Sin efecto directo en tus gastos',d:'Es una disputa política: no cambia precios, sueldos ni créditos de forma inmediata.'},{t:'Puede frenar otros temas',d:'Mientras dura la crisis, el Gobierno y el Congreso tienen menos espacio para acuerdos que sí afectan tu día a día, como el Presupuesto.'}],
+   terms:[{t:'Acusación constitucional',d:'Juicio político del Congreso que puede destituir a un ministro u otra autoridad.'},{t:'Gabinete',d:'Conjunto de ministras y ministros que trabajan con el Presidente.'}] }
+];
+
+
+/* ============ UTILIDADES ============ */
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const stripHtml = h => { const d=document.createElement('div'); d.innerHTML=h||''; return (d.textContent||'').replace(/\s+/g,' ').trim(); };
+const fmtDate = (iso, dateOnly) => { const d=new Date(iso); if(isNaN(d)) return '';
+  const day = d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Santiago'});
+  return dateOnly ? day : day+' · '+d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',timeZone:'America/Santiago'}); };
+const ago = iso => { const t=new Date(iso); if(isNaN(t)) return ''; const m=Math.round((Date.now()-t)/6e4);
+  if(m<1) return 'recién'; if(m<60) return `hace ${m} min`; const h=Math.round(m/60); if(h<24) return `hace ${h} h`; const d=Math.round(h/24); return `hace ${d} día${d>1?'s':''}`; };
+const TONE = { positivo:['bg-emerald-100 text-emerald-800','▲ Favorable para tu bolsillo'], negativo:['bg-rose-100 text-rose-800','▼ Presión sobre tu bolsillo'], mixto:['bg-amber-100 text-amber-800','◆ Efecto mixto'], neutral:['bg-stone-200 text-stone-700','● Efecto neutral'] };
+const store = { get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} } };
+const hash = s => { let h=0; for(const c of String(s)) h=(h*31+c.charCodeAt(0))|0; return (h>>>0).toString(36); };
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.remove('hidden'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add('hidden'),2200); }
+function srcBadge(k,size='sm'){ const s=SOURCES[k]||{short:'?',color:'bg-stone-100 text-stone-700 border-stone-200',dot:'#999'};
+  return `<span class="inline-flex items-center gap-1.5 border rounded-md ${size==='lg'?'px-2.5 py-1 text-xs':'px-2 py-0.5 text-[11px]'} font-bold tracking-wide ${s.color}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${esc(s.short)}</span>`; }
+
+/* ============ ESTADO ============ */
+const state = { tab:'vivo', cat:null, q:'', live:[], liveSrc:new Set(), topic:'all', active:null, srvUpdated:null, srvOK:null, hasBackend:location.protocol!=='file:' ? null : false };
+const TOPICS = { all:['Todo','🗞️'], eco:['Economía','📈'], pol:['Política','🗳️'] };
+
+/* ================================================================
+   MOTOR DE PLANTILLAS — explica noticias en el navegador, sin API
+   1) Normaliza el titular + resumen del RSS.
+   2) Detecta conceptos (IPC, dólar, TPM, IPSA, AFP, Presupuesto…).
+   3) Detecta la dirección (sube / baja / se mantiene) y las cifras.
+   4) Rellena plantillas para: palabras simples, país y bolsillo.
+   Para agregar un concepto, copia un bloque de CONCEPTOS.
+   ================================================================ */
+const Motor = (() => {
+  const N = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const UP   = /\b(sube|suben|subio|subieron|subir|alza|alzas|aument\w*|crece|crecen|crecio|crecimiento de|record|maximo|maximos|dispar\w*|aceler\w*|repunt\w*|gana|ganan|avanza|avanzan|mejora\w*|encarec\w*|eleva\w*|salta|escala)\b/g;
+  const DOWN = /\b(baja|bajan|bajo a|bajaron|cae|caen|cayo|cayeron|caida|retroced\w*|recort\w*|reduc\w*|desplom\w*|pierde|pierden|perdio|minimo|minimos|desaceler\w*|contrae|contraccion|frena|abarat\w*|disminu\w*|cede|retrocede)\b/g;
+  const FLAT = /\b(mantiene|mantuvo|mantener|sin cambios|estable|se mantiene)\b/;
+
+  // Cada concepto: cómo detectarlo, qué es, y qué significa si sube / baja / se mantiene.
+  // tono = efecto para el hogar promedio: positivo / negativo / mixto / neutral
+  const CONCEPTOS = [
+    { id:'ipc', re:/\b(ipc|inflacion|precios al consumidor|costo de la vida)\b/, nombre:'IPC e inflación',
+      def:'El IPC mide cuánto cambian los precios de lo que compra una familia típica; la inflación es esa subida de precios.',
+      up:{ s:'con la misma plata alcanza para comprar un poco menos.', tono:'negativo',
+           pais:['Más inflación hace menos probable que el Banco Central baje pronto la tasa de interés.','La UF sube más rápido y encarece contratos y deudas en UF en todo el país.'],
+           bolsillo:[{t:'Tu sueldo rinde menos',d:'Si los precios suben más rápido que tu sueldo, te alcanza para menos en el supermercado.'},{t:'Pagos en UF',d:'Arriendos, dividendos e isapres en UF subirán algo más en pesos en las próximas semanas.'}] },
+      down:{ s:'los precios suben más lento y tu dinero pierde menos valor.', tono:'positivo',
+           pais:['Una inflación más baja da espacio al Banco Central para bajar la tasa de interés.'],
+           bolsillo:[{t:'Precios más tranquilos',d:'Tu sueldo pierde menos poder de compra que antes.'}] },
+      flat:{ s:'los precios siguen subiendo a un ritmo parecido al de antes.', tono:'neutral',
+           pais:['El ritmo de los precios define cuándo el Banco Central podría mover la tasa de interés.'],
+           bolsillo:[{t:'Ojo con el presupuesto familiar',d:'Revisa tus gastos fijos: los precios siguen subiendo, aunque no más rápido.'}] } },
+
+    { id:'uf', re:/\b(uf|unidad de fomento)\b/, nombre:'UF',
+      def:'La UF es una unidad de valor que sube cada día según la inflación; se usa en arriendos, créditos y planes de salud.',
+      up:{ s:'lo que se paga en UF cuesta más pesos.', tono:'negativo',
+           pais:['La UF protege a ahorrantes y acreedores de la inflación, pero traspasa ese costo a quienes deben en UF.'],
+           bolsillo:[{t:'Pagos en UF',d:'Arriendos, dividendos e isapres en UF suben en pesos aunque el monto en UF sea el mismo.'}] },
+      down:{ s:'lo que se paga en UF sube más lento.', tono:'positivo', pais:['Una UF que sube más lento alivia a hogares y empresas con deudas en UF.'], bolsillo:[{t:'Pagos en UF',d:'Tu arriendo o dividendo en UF subirá menos en pesos.'}] },
+      flat:{ s:'lo que se paga en UF sigue el ritmo de la inflación.', tono:'neutral', pais:['La UF traspasa la inflación pasada a contratos y deudas de largo plazo.'], bolsillo:[{t:'Pagos en UF',d:'Revisa qué pagas en UF: su valor en pesos cambia cada día.'}] } },
+
+    { id:'tpm', re:/\b(tpm|tasa de politica monetaria|tasas? de interes|consejo del banco central|reserva federal|fed)\b/, nombre:'Tasa de interés (TPM)',
+      def:'La tasa del Banco Central (TPM) es como el "precio base" del dinero: de ella dependen lo que cobran los créditos y lo que paga el ahorro.',
+      up:{ s:'pedir prestado se vuelve más caro y ahorrar paga un poco más.', tono:'mixto',
+           pais:['Tasas más altas encarecen el crédito y enfrían el consumo y la inversión para bajar la inflación.'],
+           bolsillo:[{t:'Créditos más caros',d:'Créditos de consumo, automotrices e hipotecarios tienden a encarecerse.'},{t:'Ahorro mejor pagado',d:'Depósitos a plazo y fondos de corto plazo tienden a rendir más.'}] },
+      down:{ s:'pedir prestado se vuelve más barato, aunque el ahorro rinde algo menos.', tono:'positivo',
+           pais:['Tasas más bajas abaratan el crédito y pueden impulsar el consumo y la inversión.'],
+           bolsillo:[{t:'Créditos más baratos',d:'Con el tiempo los créditos podrían bajar: compara ofertas y evalúa refinanciar.'},{t:'Ahorro rinde menos',d:'Depósitos a plazo y fondos de corto plazo tenderían a pagar menos.'}] },
+      flat:{ s:'la tasa de interés influye en cuánto cuestan los créditos y cuánto rinde el ahorro.', tono:'neutral', pais:['La tasa del Banco Central es su principal herramienta para controlar la inflación.'], bolsillo:[{t:'Créditos y ahorro',d:'Si tienes créditos o depósitos, sigue las decisiones del Banco Central: mueven sus tasas.'}] },
+      keep:{ s:'por ahora no cambia lo que cuestan los créditos ni lo que paga el ahorro.', tono:'neutral',
+           pais:['Mantener la tasa busca equilibrar el control de la inflación con no frenar más la economía.'],
+           bolsillo:[{t:'Sin cambios inmediatos',d:'Las tasas de créditos y depósitos no deberían moverse mucho por ahora.'}] } },
+
+    { id:'dolar', re:/\b(dolar|tipo de cambio|divisa|peso chileno)\b/, nombre:'Dólar (tipo de cambio)',
+      def:'El tipo de cambio es cuántos pesos chilenos necesitas para comprar un dólar.',
+      up:{ s:'lo que viene de afuera se vuelve más caro.', tono:'negativo',
+           pais:['Un dólar más caro encarece las importaciones y puede presionar la inflación, aunque favorece a los exportadores.'],
+           bolsillo:[{t:'Importados más caros',d:'Tecnología, autos, bencina y viajes al extranjero tienden a subir de precio.'},{t:'Compras en dólares',d:'Pagar en dólares sale más caro: si necesitas, compra de a poco y no todo de una vez.'}] },
+      down:{ s:'lo que viene de afuera se vuelve algo más barato.', tono:'positivo',
+           pais:['Un dólar más barato abarata lo importado y ayuda a contener la inflación, pero reduce lo que reciben los exportadores.'],
+           bolsillo:[{t:'Importados más baratos',d:'Tecnología, viajes y compras en el extranjero podrían salir algo más baratos.'}] },
+      flat:{ s:'su precio influye en lo que cuestan los productos importados.', tono:'neutral', pais:['El precio del dólar influye en lo que cuestan los productos importados y en lo que reciben los exportadores.'], bolsillo:[{t:'Compras en dólares',d:'Viajes, tecnología y compras online dependen del precio del dólar.'}] } },
+
+    { id:'bencina', re:/\b(bencinas?|gasolinas?|combustibles?|petroleo|diesel|brent|mepco|enap)\b/, nombre:'Combustibles',
+      def:'El precio de la bencina en Chile sigue al petróleo internacional; el Mepco es un mecanismo del Estado que suaviza los cambios.',
+      up:{ s:'moverse y transportar cosas sale más caro.', tono:'negativo',
+           pais:['Combustibles más caros encarecen el transporte de casi todos los productos y presionan la inflación.'],
+           bolsillo:[{t:'Llenar el estanque',d:'Si usas auto, gastarás más en bencina; comparar precios entre estaciones ayuda.'},{t:'Transporte y despachos',d:'Taxis, aplicaciones y despachos a domicilio podrían subir sus tarifas.'}] },
+      down:{ s:'moverse y transportar cosas sale más barato.', tono:'positivo',
+           pais:['Combustibles más baratos alivian los costos de transporte y ayudan a bajar la inflación.'],
+           bolsillo:[{t:'Llenar el estanque',d:'Si usas auto, deberías gastar algo menos en bencina en las próximas semanas.'}] },
+      flat:{ s:'el precio de los combustibles influye en lo que cuesta moverse y transportar cosas.', tono:'neutral', pais:['El precio de los combustibles influye en el costo de transportar casi todo.'], bolsillo:[{t:'Bencina',d:'El precio depende del petróleo y del dólar; ENAP informa los cambios cada semana.'}] } },
+
+    { id:'bolsa', re:/\b(ipsa|bolsa|bolsas|acciones|accion|wall street|nasdaq|s&p|dow jones|bursatil|mercado bursatil)\b/, nombre:'Bolsa y acciones',
+      def:'La bolsa es donde se compran y venden acciones, que son pedacitos de empresas; el IPSA resume cómo les va a las principales de Chile.',
+      up:{ s:'las empresas valen más y los inversionistas están más optimistas.', tono:'positivo',
+           pais:['Alzas en la bolsa valorizan a las empresas y les facilitan conseguir financiamiento.'],
+           bolsillo:[{t:'Fondos A y B',d:'Si tus ahorros de AFP o fondos mutuos tienen acciones, tienden a subir; un solo día no define el largo plazo.'}] },
+      down:{ s:'los inversionistas están más nerviosos y las empresas valen menos por ahora.', tono:'negativo',
+           pais:['Caídas en la bolsa reflejan más temor de los inversionistas y pueden contagiar a otros mercados.'],
+           bolsillo:[{t:'Calma con tus fondos',d:'Los fondos con acciones pueden caer por un tiempo; vender en el peor momento suele concretar la pérdida.'}] },
+      flat:{ s:'lo que pasa en la bolsa influye en el valor de las empresas.', tono:'neutral', pais:['Lo que pasa en la bolsa influye en el valor de las empresas y en los ahorros invertidos en acciones.'], bolsillo:[{t:'Tus fondos',d:'Si tienes ahorros en fondos con acciones, su valor sube y baja con la bolsa: piensa en el largo plazo.'}] } },
+
+    { id:'financia', re:/\b(apertura a bolsa|salida a bolsa|abrirse a bolsa|recaudar|levantar capital|aumento de capital|emision de bonos|ronda de inversion)\b/, nombre:'Financiamiento de empresas', peso:2, excluye:['bolsa','empresa'],
+      def:'Cuando una empresa sale a la bolsa o emite bonos, busca dinero de inversionistas para crecer.',
+      flat:{ s:'esto muestra cuánto confían los inversionistas en esa empresa o en su sector.', tono:'neutral',
+           pais:['Las grandes operaciones de financiamiento muestran cuánto apetito tienen los inversionistas por un sector.'],
+           bolsillo:[{t:'Sin efecto directo en tus gastos',d:'Para la mayoría de las personas no cambia sus gastos; sí puede influir en fondos que invierten en ese sector.'}] } },
+
+    { id:'empresa', re:/\b(utilidad|utilidades|ganancias?|resultados financieros|resultados|ingresos|ventas)\b/, nombre:'Resultados de empresas',
+      def:'Las utilidades son lo que gana una empresa después de pagar sus costos e impuestos.',
+      up:{ s:'a la empresa le está yendo mejor.', tono:'positivo', pais:['Mejores resultados de empresas grandes suelen apoyar la bolsa y la inversión.'], bolsillo:[{t:'Si tienes sus acciones',d:'Buenos resultados pueden mover el precio de la acción, pero no garantizan que suba.'}] },
+      down:{ s:'a la empresa le está yendo peor.', tono:'negativo', pais:['Peores resultados pueden traducirse en menos inversión o empleo en el sector.'], bolsillo:[{t:'Si tienes sus acciones',d:'Malos resultados suelen presionar el precio de la acción.'}] },
+      flat:{ s:'la empresa mantiene un desempeño parecido.', tono:'neutral', pais:['Los resultados de las grandes empresas ayudan a medir la salud de la economía.'], bolsillo:[{t:'Si tienes sus acciones',d:'Revisa la noticia completa antes de tomar decisiones.'}] } },
+
+    { id:'cobre', re:/\b(cobre|codelco|mineria|minera|mineras|litio|sqm)\b/, nombre:'Minería (cobre y litio)',
+      def:'El cobre es lo que Chile más vende al mundo; el litio es otro mineral clave para fabricar baterías.',
+      up:{ s:'a Chile le entran más dólares por lo que vende al mundo.', tono:'positivo',
+           pais:['Precios más altos del cobre o el litio aumentan los ingresos del Estado y traen más dólares al país.'],
+           bolsillo:[{t:'Efecto indirecto',d:'Más ingresos mineros suelen bajar el dólar y apoyar el empleo en el norte.'}] },
+      down:{ s:'a Chile le entran menos dólares por lo que vende al mundo.', tono:'negativo',
+           pais:['Precios más bajos reducen los ingresos fiscales y pueden presionar al alza el dólar.'],
+           bolsillo:[{t:'Efecto indirecto',d:'Un cobre más barato suele traer un dólar más caro y menos actividad en regiones mineras.'}] },
+      flat:{ s:'la minería es clave para lo que Chile vende al mundo.', tono:'neutral', pais:['La minería es clave para las exportaciones y los ingresos fiscales de Chile.'], bolsillo:[{t:'Efecto indirecto',d:'Lo que pasa con la minería influye en el dólar y en el empleo del norte.'}] } },
+
+    { id:'pib', re:/\b(pib|imacec|recesion|actividad economica|crecimiento economico|economia chilena|crecera|crecimiento)\b/, nombre:'Crecimiento económico',
+      def:'El PIB y el Imacec miden cuánto produce la economía; una recesión es cuando produce menos durante varios meses seguidos.',
+      up:{ s:'el país está produciendo más.', tono:'positivo', pais:['Más crecimiento suele traer más empleo, inversión y recaudación de impuestos.'], bolsillo:[{t:'Más oportunidades',d:'Con la economía creciendo, las empresas tienden a contratar más.'}] },
+      down:{ s:'el país está produciendo menos o creciendo más lento.', tono:'negativo', pais:['Menos crecimiento significa menos empleo nuevo y menor recaudación para el Estado.'], bolsillo:[{t:'Cuida tus finanzas',d:'En períodos débiles conviene evitar deudas caras y reforzar tu fondo de emergencia.'}] },
+      flat:{ s:'se trata de cuánto está produciendo la economía.', tono:'neutral', pais:['El ritmo de crecimiento define cuánto empleo e inversión habrá en el país.'], bolsillo:[{t:'Empleo',d:'Cuando la economía crece poco, encontrar trabajo puede tomar más tiempo.'}] } },
+
+    { id:'desempleo', re:/\b(desempleo|desocupacion|cesantia|despidos?)\b/, nombre:'Desempleo',
+      def:'La tasa de desempleo es el porcentaje de personas que buscan trabajo y no lo encuentran.',
+      up:{ s:'hay más personas buscando trabajo sin encontrarlo.', tono:'negativo', pais:['Más desempleo reduce el consumo de los hogares, el principal motor de la economía.'], bolsillo:[{t:'Empleo más difícil',d:'Si buscas trabajo, puede tomar más tiempo: actualiza tu CV y amplía tu búsqueda.'}] },
+      down:{ s:'más personas están encontrando trabajo.', tono:'positivo', pais:['Menos desempleo sostiene el consumo y la confianza de los hogares.'], bolsillo:[{t:'Más ofertas de trabajo',d:'Buen momento para postular, sobre todo en los sectores que están contratando.'}] },
+      flat:{ s:'se trata de cuántas personas encuentran trabajo.', tono:'neutral', pais:['El empleo sostiene el consumo de los hogares, el principal motor de la economía.'], bolsillo:[{t:'Empleo',d:'Si buscas trabajo, revisa qué sectores están contratando.'}] } },
+
+    { id:'vivienda', re:/\b(hipotecari\w*|viviendas?|dividendos?|inmobiliari\w*|arriendos?|subsidio habitacional|departamentos?)\b/, nombre:'Vivienda y créditos hipotecarios',
+      def:'Un crédito hipotecario es un préstamo de largo plazo para comprar una vivienda; el dividendo es su cuota mensual.',
+      up:{ s:'comprar o arrendar vivienda se vuelve más caro.', tono:'negativo', pais:['Viviendas o créditos más caros frenan las ventas y la construcción.'], bolsillo:[{t:'Comprar casa cuesta más',d:'Cotiza en varios bancos y revisa el costo total del crédito, no solo la tasa.'}] },
+      down:{ s:'comprar vivienda se vuelve algo más accesible.', tono:'positivo', pais:['Créditos más baratos pueden reactivar la venta de viviendas y la construcción.'], bolsillo:[{t:'Dividendo más bajo',d:'Por un mismo crédito, la cuota mensual podría bajar: compara y evalúa refinanciar.'}] },
+      flat:{ s:'el acceso a la vivienda no cambia mucho por ahora.', tono:'neutral', pais:['El mercado inmobiliario influye en la construcción y el empleo.'], bolsillo:[{t:'Si buscas vivienda',d:'Compara ofertas de crédito en varios bancos antes de decidir.'}] } },
+
+    { id:'afp', re:/\b(afp|multifondos|fondo [a-e]|pensiones|pension|fondos mutuos|apv|jubilacion)\b/, nombre:'Pensiones y fondos',
+      def:'Las AFP invierten tus ahorros para la jubilación en cinco fondos, del A (más riesgoso) al E (más conservador).',
+      up:{ s:'los ahorros para la jubilación están rindiendo más.', tono:'positivo', pais:['Mejores rentabilidades aumentan los ahorros previsionales de millones de personas.'], bolsillo:[{t:'Mira el largo plazo',d:'Revisa tu fondo en tu AFP, pero no te cambies por el resultado de un solo mes.'}] },
+      down:{ s:'los ahorros para la jubilación perdieron valor por ahora.', tono:'negativo', pais:['Caídas en los fondos afectan transitoriamente los ahorros de quienes están por jubilar.'], bolsillo:[{t:'No cambies por un mes',d:'Cambiarse de fondo tras una caída suele llegar tarde; tu fondo debería depender de tu edad.'}] },
+      flat:{ s:'se trata de tus ahorros para la jubilación.', tono:'neutral', pais:['Las pensiones dependen del ahorro acumulado durante muchos años.'], bolsillo:[{t:'Revisa tu fondo',d:'Entra a tu AFP y verifica que tu fondo calce con tu edad.'}] } },
+
+    { id:'fiscal', re:/\b(presupuesto|hacienda|gasto fiscal|gasto publico|deuda publica|impuestos?|tributari\w*|megarreforma|reforma)\b/, nombre:'Presupuesto e impuestos',
+      def:'El Presupuesto es el plan de cuánto gastará el Estado y en qué; Hacienda administra las finanzas públicas.',
+      up:{ s:'el Estado planea gastar o recaudar más.', tono:'mixto', pais:['Las decisiones sobre gasto e impuestos definen cuánto invierte el Estado en salud, educación y programas sociales.'], bolsillo:[{t:'Programas y beneficios',d:'Cambios en el gasto o los impuestos pueden modificar subsidios, beneficios o lo que pagas en impuestos.'}] },
+      down:{ s:'el Estado planea gastar o recaudar menos.', tono:'mixto', pais:['Recortes de gasto pueden ordenar las cuentas fiscales, pero reducir programas y servicios públicos.'], bolsillo:[{t:'Programas y beneficios',d:'Algunos subsidios o programas podrían reducirse: revisa si usas alguno.'}] },
+      flat:{ s:'se discute cómo usará el Estado sus recursos.', tono:'neutral', pais:['Las decisiones sobre el Presupuesto y los impuestos definen cuánto invierte el Estado en salud, educación y programas sociales.'], bolsillo:[{t:'Programas y beneficios',d:'Lo que se apruebe puede cambiar subsidios, beneficios o servicios públicos que usas.'}] } },
+
+    { id:'politica', re:/\b(congreso|senado|camara de diputados|diputad\w*|senador\w*|ministr\w*|gobierno|la moneda|president\w*|acusacion constitucional|gabinete|partidos?|oposicion|oficialismo|proyecto de ley|eleccion\w*|candidat\w*)\b/, nombre:'Política e instituciones', politico:true,
+      def:'El Gobierno propone y ejecuta políticas, y el Congreso (Cámara de Diputados y Senado) discute y aprueba las leyes.',
+      flat:{ s:'es una discusión política que puede influir en qué leyes y políticas avanzan.', tono:'neutral',
+           pais:['Las decisiones del Gobierno y el Congreso definen qué leyes y políticas avanzan, y eso puede tomar semanas o meses.','Las disputas políticas prolongadas pueden retrasar otros proyectos en discusión.'],
+           bolsillo:[{t:'Sin efecto inmediato en tus gastos',d:'Por ahora es una discusión política: no cambia precios, sueldos ni créditos de forma directa.'},{t:'Atento a lo que se apruebe',d:'Si termina en una ley o en cambios de gobierno, podría afectar beneficios, impuestos o servicios públicos.'}] } },
+  ];
+  // Definiciones específicas para términos políticos frecuentes
+  const TERMINOS_POL = [
+    [/acusacion constitucional/, 'Acusación constitucional', 'Juicio político del Congreso que puede destituir a un ministro u otra autoridad.'],
+    [/gabinete/, 'Gabinete', 'Conjunto de ministras y ministros que trabajan con el Presidente.'],
+    [/proyecto de ley/, 'Proyecto de ley', 'Propuesta de ley que debe ser aprobada por la Cámara y el Senado antes de regir.'],
+    [/comision mixta/, 'Comisión Mixta', 'Grupo de diputados y senadores que resuelve diferencias entre ambas cámaras.'],
+  ];
+
+  const frases = t => String(t||'').replace(/\s+/g,' ').split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡"“])/).map(s=>s.trim()).filter(s=>s.length>25);
+  const cifras = t => [...new Set((String(t||'').match(/(US\$\s?[\d.,]+\s?(?:mil\s)?(?:millones|billones)?|\$\s?[\d.,]+(?:\s(?:mil|millones|billones))?|\d+(?:[.,]\d+)?\s?%|\d+(?:[.,]\d+)?\s(?:puntos base|puntos))/gi)||[]).map(s=>s.trim()))].slice(0,3);
+  const cuenta = (re, s) => (s.match(re)||[]).length;
+
+  // Frases que invierten el sentido ("revierte alza" = baja; "revierte caída" = sube)
+  const ajusta = s => s.replace(/\b(revierte|revirtio|borra|borro|anula)\s+(su |la |el |las |los )?(alza|alzas|ganancias?|avance|subida)\w*/g,' cae ')
+                       .replace(/\b(revierte|revirtio|borra|borro|recupera)\s+(su |la |el |las |los )?(caida|baja|perdidas?|retroceso)\w*/g,' sube ');
+  // Dirección cerca de la palabra clave del concepto (evita mezclar "sube el dólar" con "baja la bolsa")
+  function direccionDe(c, texto){
+    const t=ajusta(N(texto)); const re=new RegExp(c.re.source,'g'); let m, u=0, d=0, f=false;
+    while((m=re.exec(t))){ const w=t.slice(Math.max(0,m.index-45), m.index+m[0].length+55);
+      u+=cuenta(UP,w); d+=cuenta(DOWN,w); f = f || FLAT.test(w); }
+    if(u===0 && d===0) return f ? 'keep' : null;
+    return u>d ? 'up' : d>u ? 'down' : 'flat';
+  }
+  function direccion(texto){
+    const t=ajusta(N(texto)); const u=cuenta(UP,t), d=cuenta(DOWN,t);
+    if(FLAT.test(t) && u===d) return 'flat';
+    return u>d ? 'up' : d>u ? 'down' : 'flat';
+  }
+
+  function explicar({ title='', summary='', topic='' }){
+    const titulo = String(title).trim(), resumen = String(summary).trim();
+    const tT = N(titulo), tR = N(resumen), todo = tT+' '+tR;
+    // 1) conceptos detectados (el titular pesa más que el resumen)
+    const hall = CONCEPTOS.map(c=>{ const mt=cuenta(new RegExp(c.re.source,'g'),tT), mr=cuenta(new RegExp(c.re.source,'g'),tR);
+      const pos = (tT+' '+tR).search(c.re); return { c, score: (mt*3+mr)*(c.peso||1), pos }; })
+      .filter(x=>x.score>0).sort((a,b)=>b.score-a.score || a.pos-b.pos);
+    if(topic==='pol' && !hall.some(h=>h.c.id==='politica')) hall.push({ c:CONCEPTOS.find(c=>c.id==='politica'), score:0.5, pos:999 });
+    const excl = new Set(hall.flatMap(h=>h.c.excluye||[]));
+    const top = hall.filter(h=>!excl.has(h.c.id)).slice(0,3).map(h=>h.c);
+    const dirGlobal = direccion(titulo) !== 'flat' ? direccion(titulo) : direccion(titulo+' '+resumen);
+    // El concepto principal usa la dirección detectada; los secundarios, textos explicativos generales.
+    const d0 = top[0] ? (direccionDe(top[0],titulo) || direccionDe(top[0],resumen) || dirGlobal) : dirGlobal;
+    const variante = c => c===top[0] ? (c[d0] || c.flat || c.up) : (c.flat || c.up);
+
+    // 2) Palabras simples
+    const clave = frases(resumen).filter(f => N(f).slice(0,40) !== tT.slice(0,40))
+      .sort((a,b)=> (cuenta(/\d/g,N(b))+ (CONCEPTOS.some(c=>c.re.test(N(b)))?3:0)) - (cuenta(/\d/g,N(a))+(CONCEPTOS.some(c=>c.re.test(N(a)))?3:0)))[0];
+    const nums = cifras(titulo+' '+resumen);
+    let simple = `En pocas palabras: ${titulo.replace(/[.\s]+$/,'')}.`;
+    if(clave) simple += ' ' + (clave.split(' ').length>32 ? clave.split(' ').slice(0,32).join(' ')+'…' : clave);
+    if(top[0]){ simple += ' ' + top[0].def; simple += ` En simple, ${variante(top[0]).s}`; }
+    else simple += ' Lee la nota completa para conocer el contexto y las cifras exactas.';
+    if(nums.length) simple += ` Dato clave: ${nums.join(' · ')}.`;
+
+    // 3) Impacto en el país / bolsillo
+    const pais=[], bols=[], vistos=new Set();
+    top.forEach(c=>variante(c).pais.forEach(p=>{ if(pais.length<3 && !pais.includes(p)) pais.push(p); }));
+    top.forEach(c=>variante(c).bolsillo.forEach(b=>{ if(bols.length<3 && !vistos.has(b.t)){ vistos.add(b.t); bols.push(b); } }));
+    if(pais.length<2) pais.push(topic==='pol'||top.some(c=>c.politico)
+      ? 'Este tipo de decisiones políticas puede influir en la agenda del Gobierno y del Congreso en las próximas semanas.'
+      : 'Noticias como esta influyen en las expectativas de empresas e inversionistas sobre la economía chilena.');
+    if(bols.length<2) bols.push({ t:'Infórmate en la fuente', d:'Lee la nota completa para ver los detalles y las cifras exactas antes de tomar decisiones.' });
+
+    // 4) Conceptos clave, tono y categoría
+    const terms = top.map(c=>({ t:c.nombre, d:c.def }));
+    TERMINOS_POL.forEach(([re,t,d])=>{ if(re.test(todo) && terms.length<4) terms.unshift({t,d}); });
+    const esPol = top[0]?.politico;
+    const tone = esPol ? 'neutral' : (top[0] ? variante(top[0]).tono : 'neutral');
+    const CAT = { financia:'Acciones y empresas', ipc:'Inflación', uf:'Inflación', tpm:'Política monetaria', dolar:'Mercados', bencina:'Energía', bolsa:'Mercados', empresa:'Acciones y empresas', cobre:'Materias primas', pib:'Crecimiento', desempleo:'Empleo', vivienda:'Vivienda', afp:'Fondos e inversión', fiscal:'Fiscal', politica:'Política' };
+    return {
+      simple, pais, bolsillo:bols, terms:terms.slice(0,4), tone, cat: CAT[top[0]?.id] || (topic==='pol'?'Política':'Otro'),
+      warn: 'Explicación automática generada a partir del titular y el resumen del medio: puede no captar todos los matices. Lee la nota completa para el detalle.',
+      auto: true,
+    };
+  }
+  return { explicar, CONCEPTOS };
+})();
+
+/* ============ BLOQUE DE ANÁLISIS ============ */
+function analysisHTML({simple,pais,bolsillo,terms,tone,warn,auto,ia}){
+  const [tc,tl] = TONE[tone]||TONE.neutral;
+  const canSpeak = 'speechSynthesis' in window;
+  return `<div class="space-y-4">
+    <div class="flex items-center gap-2 flex-wrap"><span class="text-xs font-semibold rounded-full px-2.5 py-1 ${tc}">${tl}</span><span class="text-[11px] text-stone-500">${ia?'Explicado con IA (Claude) · verifica en la fuente original':auto?'⚙️ Explicación automática por palabras clave · verifica en la fuente original':'✍️ Explicación revisada · verifica en la fuente original'}</span></div>
+    <section class="rounded-2xl bg-[#fff6d6] border-2 border-[#f4d470] p-4">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h4 class="font-display font-bold text-[#7a5300] text-lg">💡 En palabras simples</h4>
+        ${canSpeak?`<button class="speak text-xs bg-white hover:bg-amber-100 border border-[#f4d470] rounded-full px-2.5 py-1 font-medium text-[#7a5300]" data-text="${esc(simple)}">🔊 Escuchar</button>`:''}
+      </div>
+      <p class="text-[15px] leading-relaxed text-[#4a3500]">${esc(simple)}</p>
+    </section>
+    <section class="rounded-2xl bg-[#eaf2fb] border border-[#b9d1ee] p-4">
+      <h4 class="font-display font-bold text-[#1d3f73] text-lg mb-3">🇨🇱 Impacto en el país</h4>
+      <ul class="space-y-2.5">${(pais||[]).map((p,i)=>`<li class="flex gap-3 text-[14px] leading-snug text-[#1e2f4a]"><span class="shrink-0 w-6 h-6 rounded-full bg-[#1d3f73] text-white text-xs grid place-items-center font-bold">${i+1}</span><span>${esc(p)}</span></li>`).join('')}</ul>
+    </section>
+    <section class="rounded-2xl bg-[#e9f6ee] border border-[#b5dcc3] p-4">
+      <h4 class="font-display font-bold text-[#14532d] text-lg mb-3">👛 Impacto en tu bolsillo</h4>
+      <div class="grid gap-2.5">${(bolsillo||[]).map(b=>`<div class="bg-white rounded-xl border border-[#cfe8d8] p-3"><div class="font-semibold text-[14px] text-[#14532d] mb-0.5">${esc(b.t)}</div><div class="text-[13.5px] text-stone-700 leading-snug">${esc(b.d)}</div></div>`).join('')}</div>
+    </section>
+    ${terms?.length?`<section><h4 class="text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-2">Conceptos clave</h4><div class="flex flex-wrap gap-2">${terms.map(t=>`<details class="bg-white border border-stone-200 rounded-lg text-sm"><summary class="cursor-pointer px-3 py-1.5 font-semibold list-none">📘 ${esc(t.t)}</summary><p class="px-3 pb-2 text-[13px] text-stone-600 max-w-xs">${esc(t.d)}</p></details>`).join('')}</div></section>`:''}
+    ${warn?`<p class="text-xs bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">⚠️ ${esc(warn)}</p>`:''}
+  </div>`;
+}
+const fromApi = j => ({ simple:j.explicacion_simple, pais:j.impacto_pais, bolsillo:(j.impacto_bolsillo||[]).map(b=>({t:b.titulo,d:b.detalle})), terms:(j.conceptos_clave||[]).map(c=>({t:c.termino,d:c.definicion})), tone:j.tono_bolsillo, warn:j.advertencias, cat:j.categoria });
+
+/* ============ EXPLICADAS ============ */
+function curatedFiltered(){
+  const q=norm(state.q);
+  return CURATED.filter(n=>(!state.cat||n.cat===state.cat) && (!q||norm(n.title+' '+n.summary+' '+n.terms.map(t=>t.t).join(' ')).includes(q)))
+    .sort((a,b)=>new Date(b.date)-new Date(a.date));
+}
+function renderCats(){
+  const used=[...new Set(CURATED.map(n=>n.cat))];
+  $('#catFilters').innerHTML = [['Todas',null],...used.map(c=>[c,c])].map(([l,v])=>`<button data-cat="${v??''}" class="rounded-full border px-3 py-1 text-xs transition ${state.cat===v?'bg-ink text-white border-ink':'bg-white border-stone-200 hover:border-stone-400'}">${v?CATS[v]+' ':''}${l}</button>`).join('');
+}
+function cardHTML(n, live){
+  const tn = n.tone || (live ? explain(n).tone : null);
+  const isIA = live && (n.exp || n.shared || store.get('es_ia_'+hash(n.link||n.title)));
+  const tone = tn ? `<span class="text-[11px] rounded-full px-2 py-0.5 ${TONE[tn][0]}">${TONE[tn][1].split(' ')[0]} ${tn}</span>` : `<span class="text-[11px] text-stone-400">${live?(n.topic==='pol'?'🗳️ Política':'📈 Economía'):''}</span>`;
+  return `<article data-id="${esc(n.id)}" data-kind="${live?'live':'cur'}" tabindex="0" class="card fade-in cursor-pointer bg-white rounded-2xl border border-stone-200 p-4 flex flex-col ${state.active===n.id?'active':''}">
+    <div class="flex items-center justify-between gap-2 mb-3">${srcBadge(n.src)}<span class="text-[11px] text-stone-500" title="${esc(fmtDate(n.date,n.dateOnly))}">${n.dateOnly?fmtDate(n.date,true):ago(n.date)}</span></div>
+    ${n.cat?`<div class="text-[11px] font-medium text-stone-500 mb-1">${CATS[n.cat]||''} ${esc(n.cat)}</div>`:''}
+    <h3 class="font-display font-semibold text-[17px] leading-snug mb-2">${esc(n.title)}</h3>
+    ${n.summary?`<p class="text-[13px] text-stone-600 line-clamp-3 mb-4">${esc(n.summary)}</p>`:'<div class="mb-4"></div>'}
+    <div class="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-stone-100">
+      ${tone}
+      <div class="flex items-center gap-3">
+        <a href="${esc(n.link)}" target="_blank" rel="noopener" class="ext text-[12px] text-stone-500 hover:text-ink hover:underline">Original ↗</a>
+        <span class="text-[12px] font-semibold">${isIA?'<span class="mr-1 rounded bg-violet-100 text-violet-800 px-1.5 py-0.5 text-[10px] font-bold">IA</span>':''}Ver explicación →</span>
+      </div>
+    </div>
+  </article>`;
+}
+function renderCurated(){
+  const l=curatedFiltered();
+  $('#grid').innerHTML = l.map(n=>cardHTML(n,false)).join('');
+  $('#emptyCur').classList.toggle('hidden', l.length>0);
+}
+
+/* ============ EN VIVO: lectura de RSS ============ */
+const gnews = s => `https://news.google.com/rss/search?q=${encodeURIComponent(`site:${s.site}${s.query?` (${s.query})`:''} when:2d`)}&hl=es-419&gl=CL&ceid=CL:es-419`;
+async function viaRss2json(url){ // proxy gratuito RSS → JSON
+  const p = new URLSearchParams({ rss_url:url }); if(CONFIG.RSS2JSON_KEY){ p.set('api_key',CONFIG.RSS2JSON_KEY); p.set('count', String(Math.max(CONFIG.ITEMS_PER_SOURCE,10))); }
+  const r = await fetch('https://api.rss2json.com/v1/api.json?'+p); const j = await r.json();
+  if(j.status!=='ok') throw new Error(j.message||'rss2json');
+  return j.items.map(i=>({ title:i.title, link:i.link, pubDate: /Z|[+-]\d\d:?\d\d$/.test(i.pubDate)? i.pubDate : (i.pubDate||'').replace(' ','T')+'Z', description:i.description }));
+}
+async function viaAllOrigins(url){ // respaldo: descarga el XML y lo lee en el navegador
+  const r = await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url)); if(!r.ok) throw new Error('allorigins');
+  const x = new DOMParser().parseFromString(await r.text(),'text/xml');
+  return [...x.querySelectorAll('item')].map(it=>({ title:it.querySelector('title')?.textContent, link:it.querySelector('link')?.textContent, pubDate:it.querySelector('pubDate')?.textContent, description:it.querySelector('description')?.textContent }));
+}
+async function fetchFeed(url){
+  for(const fn of [viaRss2json, viaAllOrigins]){ try{ const items=await fn(url); if(items && items.length) return items; }catch(e){} }
+  return [];
+}
+function cleanItem(i, s, fromGoogle){
+  let title = stripHtml(i.title);
+  if(fromGoogle) title = title.replace(/\s[-–|]\s[^-–|]+$/,'');   // Google News agrega " - Medio" al final
+  let summary = stripHtml(i.description);
+  if(fromGoogle || norm(summary).startsWith(norm(title).slice(0,40))) summary = '';  // en Google News el resumen repite el título
+  return { id:'L'+hash(i.link||title), src:'live_'+s.id, topic:s.topic, title, link:i.link, date:i.pubDate, summary: summary.slice(0,400), live:true };
+}
+async function loadSource(s){
+  let items=[], google=false;
+  if(s.rss) items = await fetchFeed(s.rss);
+  if(!items.length){ items = await fetchFeed(gnews(s)); google=true; }
+  return items.slice(0, CONFIG.ITEMS_PER_SOURCE).map(i=>cleanItem(i,s,google)).filter(i=>i.title && i.link);
+}
+let loadingLive=false;
+// Noticias ya explicadas por Claude en Vercel (api/cron/actualizar.js → Vercel Blob → /api/noticias).
+// En Netlify o abriendo el archivo local no existe, y la página sigue con el motor gratuito.
+async function fromServer(){
+  if(state.hasBackend===false || state.srvOK===false) return null;
+  try{
+    const r = await fetch('/api/noticias', { cache:'no-store' });
+    if(!(r.headers.get('content-type')||'').includes('json')){ state.srvOK=false; state.hasBackend=false; return null; }
+    state.hasBackend = true;
+    if(!r.ok) return null;                              // el cron aún no corre: se reintenta en la próxima actualización
+    const d = await r.json(); if(!d.items?.length) return null;
+    state.srvOK = true; state.srvUpdated = d.updated_at;
+    return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:i.explanation||null, live:true })) };
+  }catch(e){ state.hasBackend=false; return null; }
+}
+// Titulares al minuto leídos en el servidor de Vercel (api/titulares.js, guarda copia solo 60 s).
+async function fromTitulares(){
+  if(state.hasBackend===false || location.protocol==='file:') return null;
+  try{
+    const r = await fetch('/api/titulares', { cache:'no-store' });
+    if(!r.ok || !(r.headers.get('content-type')||'').includes('json')) return null;
+    const d = await r.json(); if(!d.items?.length) return null;
+    state.hasBackend = true; state.freshAt = d.updated_at;
+    return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:null, shared:!!i.explicada, live:true })) };
+  }catch(e){ return null; }
+}
+async function loadLive({ force=false, silent=false }={}){
+  if(loadingLive) return; 
+  const cached = store.get('es_live');
+  // 1) Si hay titulares guardados, se muestran al instante (no hay pantalla vacía)
+  if(cached && !state.live.length){ state.live=cached.items; renderLive(cached.ok, cached.t); }
+  // 2) Si son muy recientes, no se vuelve a pedir
+  if(!force && cached && Date.now()-cached.t < CONFIG.CACHE_MIN*6e4) return;
+  loadingLive=true;
+  const firstLoad = !state.live.length;
+  if(firstLoad){
+    $('#liveGrid').innerHTML = Array.from({length:6}).map(()=>`<div class="bg-white rounded-2xl border border-stone-200 p-4 animate-pulse"><div class="h-4 w-16 bg-stone-200 rounded mb-4"></div><div class="h-5 bg-stone-200 rounded mb-2"></div><div class="h-5 w-3/4 bg-stone-200 rounded mb-4"></div><div class="h-3 bg-stone-100 rounded mb-1.5"></div><div class="h-3 w-5/6 bg-stone-100 rounded"></div></div>`).join('');
+  }
+  if(!silent) $('#liveStatus').innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-rose-500 pulse-dot mr-1"></span>Buscando los titulares más recientes…';
+  $('#refresh').disabled = true;
+  try{
+    let all=[], ok=0;
+    const [fresh, srv] = await Promise.all([fromTitulares(), fromServer()]);
+    if(fresh){                                          // 1) Vercel: titulares al minuto + explicaciones de Claude ya hechas
+      const exp = new Map((srv?.items||[]).filter(i=>i.exp).map(i=>[i.link, i.exp]));
+      all = fresh.items.map(i=>({ ...i, exp: exp.get(i.link)||null })); ok = fresh.ok;
+    }
+    else if(srv){ all = srv.items; ok = srv.ok; }       // 2) solo las ya explicadas (si falló la lectura al minuto)
+    else {                                              // 2) sin servidor: leer los feeds desde el navegador (rss2json / allorigins)
+      const results = await Promise.all(LIVE_SOURCES.map(s=>loadSource(s).catch(()=>[])));
+      const seen=new Set();
+      results.flat().sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(i=>{ const k=norm(i.title).slice(0,70); if(!seen.has(k)){ seen.add(k); all.push(i); } });
+      ok = results.filter(r=>r.length).length;
+    }
+    if(all.length || !state.live.length){
+      const before = new Set(state.live.map(i=>i.id));
+      const nuevas = firstLoad ? 0 : all.filter(i=>!before.has(i.id)).length;
+      state.live = all; store.set('es_live',{t:Date.now(), items:all, ok, srvUpdated:state.srvUpdated});
+      renderLive(ok, Date.now());
+      if(nuevas>0) toast(`🆕 ${nuevas} titular${nuevas>1?'es':''} nuevo${nuevas>1?'s':''}`);
+    } else {
+      renderLive(...lastLiveArgs());   // si falló la red, se mantienen los últimos titulares
+    }
+  } finally { loadingLive=false; $('#refresh').disabled=false; }
+}
+function renderLive(ok, t){
+  $('#liveTopics').innerHTML = Object.entries(TOPICS).map(([k,[l,ic]])=>{ const n = k==='all'? state.live.length : state.live.filter(i=>i.topic===k).length;
+    return `<button data-topic="${k}" class="px-3 py-1.5 rounded-lg font-medium ${state.topic===k?'bg-ink text-white':''}">${ic} ${l} <span class="text-[11px] opacity-60">${n}</span></button>`; }).join('');
+  const srcs = LIVE_SOURCES.filter(s=>state.topic==='all'||s.topic===state.topic);
+  $('#liveSources').innerHTML = srcs.map(s=>{ const n=state.live.filter(i=>i.src==='live_'+s.id).length, on=state.liveSrc.has(s.id);
+    return `<button data-live-src="${s.id}" class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${on?'bg-ink text-white border-ink':'bg-white border-stone-200 hover:border-stone-400'}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.name} <span class="${on?'text-slate-300':'text-stone-400'}">${n}</span></button>`; }).join('');
+  const q=norm(state.q);
+  const l = state.live.filter(i=>(state.topic==='all'||i.topic===state.topic) && (!state.liveSrc.size||state.liveSrc.has(i.src.replace('live_',''))) && (!q||norm(i.title+' '+i.summary).includes(q)));
+  $('#liveGrid').innerHTML = l.map(n=>cardHTML(n,true)).join('');
+  const empty = $('#liveEmpty');
+  if(!state.live.length){ empty.innerHTML = 'No pudimos traer noticias en este momento. Revisa tu conexión y toca <b>↻ Actualizar</b>.'; empty.classList.remove('hidden'); }
+  else if(!l.length){ empty.textContent='No hay noticias con ese filtro.'; empty.classList.remove('hidden'); }
+  else empty.classList.add('hidden');
+  $('#liveCount').textContent = state.live.length ? `(${state.live.length})` : '';
+  const nExp = state.live.filter(i=>i.exp || i.shared || store.get('es_ia_'+hash(i.link||i.title))).length;
+  if(state.live.length && (state.freshAt||state.srvUpdated)){ $('#liveStatus').textContent = `${state.live.length} titulares · ${nExp} explicados con IA (el resto, con el motor automático) · el servidor revisó ${ok} de ${LIVE_SOURCES.length} medios ${ago(state.freshAt||state.srvUpdated)} · esta página se actualiza sola cada ${CONFIG.REFRESH_MIN} min.`; }
+  else $('#liveStatus').textContent = state.live.length ? `${state.live.length} titulares · ${ok} de ${LIVE_SOURCES.length} medios respondieron · actualizado ${ago(new Date(t).toISOString())} · se actualiza solo cada ${CONFIG.REFRESH_MIN} min. Toca uno para que te lo expliquemos.` : '';
+}
+
+/* ============ EXPLICAR (motor de plantillas, sin API) ============ */
+// Explica una noticia con el motor de plantillas (en el navegador, gratis y sin API)
+function explain(n){
+  const ia = n.exp || store.get('es_ia_'+hash(n.link||n.title));   // explicación de Claude (del cron o pedida antes)
+  if(ia) return { ...fromApi(ia), ia:true };
+  return Motor.explicar({ title:n.title, summary:n.summary, topic:n.topic });   // motor gratuito
+}
+// Botón "Explicar": pide a /api/explicar (Vercel + Claude) una explicación específica
+async function explainIA(n, soloGuardada=false){
+  const r = await fetch('/api/explicar',{ method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ title:n.title, source:(SOURCES[n.src]||{}).name||'', date:n.date||'', summary:n.summary||'', link:n.link||'', soloGuardada }) });
+  if(!(r.headers.get('content-type')||'').includes('json')) throw new Error('noapi');
+  const j = await r.json(); if(!r.ok) throw new Error(j.error||'error');
+  store.set('es_ia_'+hash(n.link||n.title), j); return j;
+}
+const iaButton = () => state.hasBackend ? `<button id="iaBtn" class="w-full mb-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-900 py-2.5 text-sm font-semibold">Explicar</button>` : '';
+function bindIA(n, boxSel){
+  const b=$('#iaBtn'); if(!b) return;
+  b.onclick = async () => {
+    b.disabled=true; b.textContent='Explicando…';
+    try{ const j=await explainIA(n); $(boxSel).innerHTML = analysisHTML({ ...fromApi(j), ia:true }); b.remove(); renderLive(...lastLiveArgs()); }
+    catch(e){ b.outerHTML = `<p class="mb-4 text-xs text-stone-500 bg-stone-100 rounded-lg px-3 py-2">No se pudo explicar ahora (${esc(e.message==='noapi'?'la función no está activada en este sitio':e.message)}). Se mantiene la explicación automática.</p>`; }
+  };
+}
+/* ============ DRAWER ============ */
+const drawer=$('#drawer'), overlay=$('#overlay');
+function openDrawer(html){ $('#drawerBody').innerHTML=html; drawer.classList.remove('translate-y-full','md:translate-x-full'); drawer.setAttribute('aria-hidden','false'); drawer.scrollTop=0; overlay.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+function closeDrawer(){ drawer.classList.add('translate-y-full','md:translate-x-full'); drawer.setAttribute('aria-hidden','true'); overlay.classList.add('hidden'); document.body.style.overflow=''; try{ speechSynthesis.cancel(); }catch(e){} if(state.active){ state.active=null; state.tab==='vivo'?renderLive(...lastLiveArgs()):renderCurated(); } }
+const lastLiveArgs = () => { const c=store.get('es_live')||{}; if(c.srvUpdated && !state.srvUpdated) state.srvUpdated=c.srvUpdated; return [c.ok||0, c.t||Date.now()]; };
+const head = label => `<div class="sticky top-0 bg-paper/95 backdrop-blur border-b border-stone-200 px-5 py-3 flex items-center justify-between z-10"><span class="text-xs font-semibold text-stone-500 uppercase tracking-wider">${label}</span><button data-close class="w-9 h-9 rounded-lg hover:bg-stone-200 text-lg" aria-label="Cerrar">✕</button></div>`;
+function newsHeader(n){
+  const s=SOURCES[n.src]||{name:''};
+  return `<div class="flex items-center gap-2 flex-wrap mb-3">${srcBadge(n.src,'lg')}<span class="text-xs text-stone-500">${esc(s.name)}</span></div>
+    <h2 class="font-display text-2xl font-bold leading-tight mb-3">${esc(n.title)}</h2>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-500 mb-4"><span>🗓️ ${fmtDate(n.date,n.dateOnly)}</span>${n.cat?`<span>${CATS[n.cat]||''} ${esc(n.cat)}</span>`:''}</div>
+    ${n.summary?`<blockquote class="border-l-4 border-stone-300 pl-3 text-[14px] text-stone-700 mb-4"><span class="block text-[10px] uppercase tracking-wider text-stone-400 mb-1">Resumen del medio</span>${esc(n.summary)}</blockquote>`:''}
+    <a href="${esc(n.link)}" target="_blank" rel="noopener" class="flex items-center justify-center gap-2 w-full rounded-xl bg-ink text-white py-2.5 text-sm font-semibold hover:bg-slate-800 mb-6">Leer la nota completa en ${esc(s.name)} ↗</a>`;
+}
+function openCurated(id){
+  const n=CURATED.find(x=>String(x.id)===String(id)); if(!n) return; state.active=n.id; renderCurated();
+  openDrawer(head('Explicación') + `<div class="p-5 sm:p-6 fade-in">${newsHeader(n)}${analysisHTML(n)}</div>`);
+}
+function openLiveItem(id){
+  const n=state.live.find(x=>x.id===id); if(!n) return; state.active=n.id; renderLive(...lastLiveArgs());
+  const x = explain(n); if(!n.cat) n.cat = x.cat;
+  openDrawer(head('Explicación') + `<div class="p-5 sm:p-6 fade-in">${newsHeader(n)}${x.ia?'':iaButton()}<div id="expBox">${analysisHTML(x)}</div></div>`);
+  if(!x.ia) bindIA(n, '#expBox');
+  if(!x.ia && n.shared){                                // otro visitante ya la explicó: se trae gratis, sin tocar el botón
+    const b=$('#iaBtn'); if(b){ b.disabled=true; b.textContent='Cargando explicación…'; }
+    explainIA(n, true).then(j=>{ if(state.active!==n.id) return; $('#expBox').innerHTML = analysisHTML({ ...fromApi(j), ia:true }); $('#iaBtn')?.remove(); renderLive(...lastLiveArgs()); })
+      .catch(()=>{ const b=$('#iaBtn'); if(b){ b.disabled=false; b.textContent='Explicar'; } });
+  }
+}
+function openForm(){
+  openDrawer(head('Explica una noticia') + `<div class="p-5 sm:p-6 fade-in">
+    <h2 class="font-display text-2xl font-bold mb-1">¿Leíste algo y no lo entendiste?</h2>
+    <p class="text-sm text-stone-600 mb-4">Pega el título y el primer párrafo de cualquier noticia económica o política y te la explicamos en simple, al instante.</p>
+    <form id="liveForm" class="space-y-3 bg-white rounded-2xl border border-stone-200 p-4">
+      <input id="fTitle" required maxlength="300" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="Título de la noticia">
+      <textarea id="fBody" rows="5" required maxlength="2500" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="Pega aquí el resumen o los primeros párrafos…"></textarea>
+      <button id="fBtn" class="w-full rounded-xl bg-ink text-white py-2.5 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50">💡 Explícamela en simple</button>
+    </form>
+    <div id="fOut" class="mt-5"></div></div>`);
+  $('#liveForm').onsubmit = e => {
+    e.preventDefault();
+    const n = { title:$('#fTitle').value.trim(), summary:$('#fBody').value.trim(), topic:'' };
+    $('#fOut').innerHTML = iaButton() + '<div id="fBox">' + analysisHTML(explain(n)) + '</div>';
+    bindIA({ ...n, link:'manual:'+n.title }, '#fBox');
+    $('#fOut').scrollIntoView({behavior:'smooth', block:'start'});
+  };
+}
+
+/* ============ EVENTOS ============ */
+function setTab(t){
+  state.tab=t; $$('.tabpane').forEach(p=>p.classList.toggle('hidden', p.id!=='tab-'+t));
+  $$('.tab').forEach(b=>{ const on=b.dataset.tab===t; b.classList.toggle('bg-ink',on); b.classList.toggle('text-white',on); });
+  try{ history.replaceState(null,'', t==='explicadas'?'#explicadas':location.pathname); }catch(e){}
+}
+document.addEventListener('click', e=>{
+  if(e.target.closest('a.ext')) return;
+  const on=s=>e.target.closest(s); let el;
+  if(on('[data-close]')) return closeDrawer();
+  if(el=on('[data-tab]')) return setTab(el.dataset.tab);
+  if(el=on('article[data-kind="cur"]')) return openCurated(el.dataset.id);
+  if(el=on('article[data-kind="live"]')) return openLiveItem(el.dataset.id);
+  if(el=on('[data-cat]')){ state.cat=el.dataset.cat||null; renderCats(); renderCurated(); return; }
+  if(el=on('[data-topic]')){ state.topic=el.dataset.topic; state.liveSrc.clear(); renderLive(...lastLiveArgs()); return; }
+  if(el=on('[data-live-src]')){ const k=el.dataset.liveSrc; state.liveSrc.has(k)?state.liveSrc.delete(k):state.liveSrc.add(k); renderLive(...lastLiveArgs()); return; }
+  if(on('#refresh')) return loadLive({force:true});
+  if(on('#openLive')) return openForm();
+  if(el=on('.speak')){ try{ if(speechSynthesis.speaking){ speechSynthesis.cancel(); el.textContent='🔊 Escuchar'; return; }
+    const u=new SpeechSynthesisUtterance(el.dataset.text); u.lang='es-CL'; u.rate=0.95; u.onend=()=>el.textContent='🔊 Escuchar'; el.textContent='⏹ Detener'; speechSynthesis.speak(u); }catch(err){} return; }
+});
+overlay.onclick=closeDrawer;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); if(e.key==='Enter'){ const a=e.target.closest&&e.target.closest('article[data-kind]'); if(a) a.click(); } });
+$('#search').addEventListener('input', e=>{ state.q=e.target.value; state.tab==='vivo'?renderLive(...lastLiveArgs()):renderCurated(); });
+
+/* ============ INICIO ============ */
+renderCats(); renderCurated();
+setTab(location.hash==='#explicadas'?'explicadas':'vivo');
+loadLive();                                                        // carga automática al abrir la URL
+setInterval(()=>{ if(!document.hidden) loadLive({force:true, silent:true}); }, CONFIG.REFRESH_MIN*6e4);
+document.addEventListener('visibilitychange', ()=>{                // al volver a la pestaña del navegador / app
+  const c=store.get('es_live'); if(!document.hidden && (!c || Date.now()-c.t > CONFIG.REFRESH_MIN*6e4)) loadLive({force:true, silent:true});
+});
+setInterval(()=>{ if(state.live.length && !state.active) renderLive(...lastLiveArgs()); }, 60000); // refresca los "hace X min"
+</script>
+</body>
+</html>
