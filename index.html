@@ -127,7 +127,7 @@ const LIVE_SOURCES = [
 <!-- DRAWER -->
 <div id="overlay" class="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-40 hidden"></div>
 <aside id="drawer" class="drawer fixed z-50 bg-paper shadow-2xl inset-x-0 bottom-0 max-h-[92vh] rounded-t-3xl translate-y-full
-  md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:w-[560px] md:max-h-none md:rounded-none md:translate-y-0 md:translate-x-full overflow-y-auto scrollbar-thin" aria-hidden="true">
+  md:top-0 md:bottom-0 md:right-0 md:left-auto md:h-screen md:w-[560px] md:max-h-screen md:rounded-none md:translate-y-0 md:translate-x-full overflow-y-auto overscroll-contain scrollbar-thin" aria-hidden="true">
   <div id="drawerBody"></div>
 </aside>
 <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink text-white text-sm px-4 py-2 rounded-lg shadow-lg z-[60] hidden"></div>
@@ -266,7 +266,7 @@ function srcBadge(k,size='sm'){ const s=SOURCES[k]||{short:'?',color:'bg-stone-1
   return `<span class="inline-flex items-center gap-1.5 border rounded-md ${size==='lg'?'px-2.5 py-1 text-xs':'px-2 py-0.5 text-[11px]'} font-bold tracking-wide ${s.color}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${esc(s.short)}</span>`; }
 
 /* ============ ESTADO ============ */
-const state = { tab:'vivo', cat:null, q:'', live:[], liveSrc:new Set(), topic:'all', active:null, srvUpdated:null, srvOK:null, hasBackend:location.protocol!=='file:' ? null : false };
+const state = { tab:'vivo', cat:null, q:'', live:[], liveSrc:new Set(), topic:'all', active:null, srvUpdated:null, srvOK:null, hasBackend:location.protocol==='file:' ? false : (store.get('es_backend') ? true : null) };
 const TOPICS = { all:['Todo','🗞️'], eco:['Economía','📈'], pol:['Política','🗳️'] };
 
 /* ================================================================
@@ -584,12 +584,17 @@ async function fromServer(){
   try{
     const r = await fetch('/api/noticias', { cache:'no-store' });
     if(!(r.headers.get('content-type')||'').includes('json')){ state.srvOK=false; state.hasBackend=false; return null; }
-    state.hasBackend = true;
+    markBackend();
     if(!r.ok) return null;                              // el cron aún no corre: se reintenta en la próxima actualización
     const d = await r.json(); if(!d.items?.length) return null;
     state.srvOK = true; state.srvUpdated = d.updated_at;
     return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:i.explanation||null, live:true })) };
-  }catch(e){ state.hasBackend=false; return null; }
+  }catch(e){ if(state.hasBackend!==true) state.hasBackend=false; return null; }
+}
+// Se recuerda que este sitio tiene servidor (Vercel), así el botón "Explicar" aparece apenas se abre la página.
+function markBackend(){
+  if(state.hasBackend===true) return; state.hasBackend = true; store.set('es_backend', true);
+  if(state.active && !$('#iaBtn') && $('#expBox') && !explain(state.live.find(x=>x.id===state.active)||{}).ia) openLiveItem(state.active);
 }
 // Titulares al minuto leídos en el servidor de Vercel (api/titulares.js, guarda copia solo 60 s).
 async function fromTitulares(){
@@ -598,7 +603,7 @@ async function fromTitulares(){
     const r = await fetch('/api/titulares', { cache:'no-store' });
     if(!r.ok || !(r.headers.get('content-type')||'').includes('json')) return null;
     const d = await r.json(); if(!d.items?.length) return null;
-    state.hasBackend = true; state.freshAt = d.updated_at;
+    markBackend(); state.freshAt = d.updated_at;
     return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:null, shared:!!i.explicada, live:true })) };
   }catch(e){ return null; }
 }
@@ -633,7 +638,7 @@ async function loadLive({ force=false, silent=false }={}){
     if(all.length || !state.live.length){
       const before = new Set(state.live.map(i=>i.id));
       const nuevas = firstLoad ? 0 : all.filter(i=>!before.has(i.id)).length;
-      state.live = all; store.set('es_live',{t:Date.now(), items:all, ok, srvUpdated:state.srvUpdated});
+      state.live = all; store.set('es_live',{t:Date.now(), items:all, ok, srvUpdated:state.freshAt||state.srvUpdated});
       renderLive(ok, Date.now());
       if(nuevas>0) toast(`🆕 ${nuevas} titular${nuevas>1?'es':''} nuevo${nuevas>1?'s':''}`);
     } else {

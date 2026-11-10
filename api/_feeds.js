@@ -27,7 +27,7 @@ export const SOURCES = [
 ];
 
 const parser = new Parser({
-  timeout: 10000,
+  timeout: 6000,
   headers: { 'User-Agent': 'EconSimpleBot/1.0 (agregador de noticias económicas)' },
 });
 
