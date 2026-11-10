@@ -1,0 +1,11 @@
+{
+  "name": "econsimple",
+  "version": "1.1.0",
+  "private": true,
+  "description": "EconSimple: noticias económicas y políticas de Chile explicadas en simple",
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "^2.9.0",
+    "rss-parser": "^3.13.0"
+  }
+}
