@@ -15,14 +15,14 @@ export const SOURCES = [
   { id: 'df',        topic: 'eco', name: 'Diario Financiero',   site: 'df.cl',          rss: 'https://www.df.cl/noticias/site/list/port/rss.xml', query: '' },
   { id: 'emol',      topic: 'eco', name: 'Emol Economía',       site: 'emol.com',       rss: '', query: ECO },
   { id: 'lt',        topic: 'eco', name: 'La Tercera · Pulso',  site: 'latercera.com',  rss: 'https://www.latercera.com/arc/outboundfeeds/rss/category/pulso/?outputType=xml', query: ECO },
-  { id: 'cnn',       topic: 'eco', name: 'CNN Chile Economía',  site: 'cnnchile.com',   rss: '', query: ECO },
+  { id: 'cnn',       topic: 'eco', name: 'CNN Chile Economía',  site: 'cnnchile.com',   rss: 'https://www.cnnchile.com/feed/', query: ECO },
   { id: 'bcch',      topic: 'eco', name: 'Banco Central',       site: 'bcentral.cl',    rss: '', query: '' },
   // ---- Política ----
   { id: 'emolpol',   topic: 'pol', name: 'Emol Nacional',       site: 'emol.com',       rss: '', query: POL },
   { id: 'ltpol',     topic: 'pol', name: 'La Tercera Política', site: 'latercera.com',  rss: 'https://www.latercera.com/arc/outboundfeeds/rss/category/politica/?outputType=xml', query: POL },
-  { id: 'cnnpol',    topic: 'pol', name: 'CNN Chile Política',  site: 'cnnchile.com',   rss: '', query: POL },
+  { id: 'cnnpol',    topic: 'pol', name: 'CNN Chile Política',  site: 'cnnchile.com',   rss: 'https://www.cnnchile.com/feed/', query: POL },
   { id: 'biobio',    topic: 'pol', name: 'BioBioChile',         site: 'biobiochile.cl', rss: '', query: POL },
-  { id: 'mostrador', topic: 'pol', name: 'El Mostrador',        site: 'elmostrador.cl', rss: '', query: POL },
+  { id: 'mostrador', topic: 'pol', name: 'El Mostrador',        site: 'elmostrador.cl', rss: 'https://www.elmostrador.cl/feed/', query: POL },
   { id: 'exante',    topic: 'pol', name: 'Ex-Ante',             site: 'ex-ante.cl',     rss: 'https://www.ex-ante.cl/feed/', query: POL },
 ];
 
@@ -48,18 +48,32 @@ export async function parseFeed(url) {
   }));
 }
 
-// Lee un medio: primero su feed directo; si falla o viene vacío, Google News filtrado por su dominio.
+// Convierte "economía OR bolsa OR \"La Moneda\"" en una expresión para filtrar feeds generales por tema.
+const fold = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const queryRegex = q => q ? new RegExp('\\b(' + q.split(/\s+OR\s+/).map(w => fold(w.replace(/"/g, '')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'i') : null;
+
+// Lee un medio: su feed directo (lo más rápido, sale apenas el diario publica) y además Google News
+// filtrado por su dominio. Se juntan ambos, se quitan duplicados y se ordena de la más nueva a la más antigua.
 export async function readSource(s, max = 8) {
-  let items = [], google = false;
-  if (s.rss) { try { items = await parseFeed(s.rss); } catch { items = []; } }
-  if (!items.length) { try { items = await parseFeed(googleNewsUrl(s)); google = true; } catch { items = []; } }
-  return items.slice(0, max).map(i => {
+  const [direct, google] = await Promise.all([
+    s.rss ? parseFeed(s.rss).catch(() => []) : Promise.resolve([]),
+    parseFeed(googleNewsUrl(s)).catch(() => []),
+  ]);
+  const re = queryRegex(s.query);
+  const directOk = direct.filter(i => !re || re.test(fold(i.title + ' ' + i.description)));
+  const clean = (i, fromGoogle) => {
     let title = strip(i.title);
-    if (google) title = title.replace(/\s[-–|]\s[^-–|]+$/, '');          // Google News agrega " - Medio"
+    if (fromGoogle) title = title.replace(/\s[-–|]\s[^-–|]+$/, '');      // Google News agrega " - Medio"
     let summary = strip(i.description);
-    if (google || summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 40))) summary = '';
+    if (fromGoogle || summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 40))) summary = '';
     return { id: idFor(i.link || title), src: s.id, topic: s.topic, source_name: s.name, title, link: i.link, date: i.pubDate, summary: summary.slice(0, 400) };
-  }).filter(i => i.title && i.link);
+  };
+  const seen = new Set(), out = [];
+  [...directOk.map(i => clean(i, false)), ...google.map(i => clean(i, true))]
+    .filter(i => i.title && i.link)
+    .sort((a, b) => (new Date(b.date) || 0) - (new Date(a.date) || 0))
+    .forEach(i => { const k = fold(i.title).slice(0, 70); if (!seen.has(k)) { seen.add(k); out.push(i); } });
+  return out.slice(0, max);
 }
 
 export async function readAll(max = 8) {

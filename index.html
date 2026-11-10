@@ -39,8 +39,8 @@ const CONFIG = {
   // Cuántas noticias mostrar por medio en "En vivo".
   ITEMS_PER_SOURCE: 8,   // máximo por medio (hay 11 medios entre economía y política)
   // Minutos que se guardan las noticias en el navegador antes de volver a pedirlas.
-  CACHE_MIN: 2,          // si la última carga tiene menos de 2 min, no se vuelve a pedir al abrir
-  REFRESH_MIN: 5,        // mientras la página esté abierta, se buscan titulares nuevos cada 5 min
+  CACHE_MIN: 1,          // si la última carga tiene menos de 1 min, no se vuelve a pedir al abrir
+  REFRESH_MIN: 2,        // mientras la página esté abierta, se buscan titulares nuevos cada 2 min
 };
 // Medios del modo "En vivo". "rss" es el feed directo del medio (si cambia, actualízalo aquí).
 // Si el feed directo falla o está vacío, se usa automáticamente Google News filtrado por el dominio ("site").
@@ -591,6 +591,17 @@ async function fromServer(){
     return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:i.explanation||null, live:true })) };
   }catch(e){ state.hasBackend=false; return null; }
 }
+// Titulares al minuto leídos en el servidor de Vercel (api/titulares.js, guarda copia solo 60 s).
+async function fromTitulares(){
+  if(state.hasBackend===false || location.protocol==='file:') return null;
+  try{
+    const r = await fetch('/api/titulares', { cache:'no-store' });
+    if(!r.ok || !(r.headers.get('content-type')||'').includes('json')) return null;
+    const d = await r.json(); if(!d.items?.length) return null;
+    state.hasBackend = true; state.freshAt = d.updated_at;
+    return { ok:d.ok_sources||0, items: d.items.map(i=>({ id:'S'+i.id, src:'live_'+i.src, topic:i.topic, title:i.title, link:i.link, date:i.date, summary:i.summary||'', exp:null, live:true })) };
+  }catch(e){ return null; }
+}
 async function loadLive({ force=false, silent=false }={}){
   if(loadingLive) return; 
   const cached = store.get('es_live');
@@ -607,8 +618,12 @@ async function loadLive({ force=false, silent=false }={}){
   $('#refresh').disabled = true;
   try{
     let all=[], ok=0;
-    const srv = await fromServer();                     // 1) Vercel: titulares ya explicados por Claude (cron)
-    if(srv){ all = srv.items; ok = srv.ok; }
+    const [fresh, srv] = await Promise.all([fromTitulares(), fromServer()]);
+    if(fresh){                                          // 1) Vercel: titulares al minuto + explicaciones de Claude ya hechas
+      const exp = new Map((srv?.items||[]).filter(i=>i.exp).map(i=>[i.link, i.exp]));
+      all = fresh.items.map(i=>({ ...i, exp: exp.get(i.link)||null })); ok = fresh.ok;
+    }
+    else if(srv){ all = srv.items; ok = srv.ok; }       // 2) solo las ya explicadas (si falló la lectura al minuto)
     else {                                              // 2) sin servidor: leer los feeds desde el navegador (rss2json / allorigins)
       const results = await Promise.all(LIVE_SOURCES.map(s=>loadSource(s).catch(()=>[])));
       const seen=new Set();
@@ -641,7 +656,7 @@ function renderLive(ok, t){
   else empty.classList.add('hidden');
   $('#liveCount').textContent = state.live.length ? `(${state.live.length})` : '';
   const nExp = state.live.filter(i=>i.exp || store.get('es_ia_'+hash(i.link||i.title))).length;
-  if(state.live.length && state.srvUpdated){ $('#liveStatus').textContent = `${state.live.length} titulares · ${nExp} explicados con IA (el resto, con el motor automático) · el servidor revisó ${ok} de ${LIVE_SOURCES.length} medios ${ago(state.srvUpdated)} · esta página se actualiza sola cada ${CONFIG.REFRESH_MIN} min.`; }
+  if(state.live.length && (state.freshAt||state.srvUpdated)){ $('#liveStatus').textContent = `${state.live.length} titulares · ${nExp} explicados con IA (el resto, con el motor automático) · el servidor revisó ${ok} de ${LIVE_SOURCES.length} medios ${ago(state.freshAt||state.srvUpdated)} · esta página se actualiza sola cada ${CONFIG.REFRESH_MIN} min.`; }
   else $('#liveStatus').textContent = state.live.length ? `${state.live.length} titulares · ${ok} de ${LIVE_SOURCES.length} medios respondieron · actualizado ${ago(new Date(t).toISOString())} · se actualiza solo cada ${CONFIG.REFRESH_MIN} min. Toca uno para que te lo expliquemos.` : '';
 }
 
